@@ -97,7 +97,10 @@ fn main() -> Result<()> {
             );
         }
         WriteOutcome::Aborted => {
-            println!("{}", style("Overwrite cancelled — no file written.").yellow());
+            println!(
+                "{}",
+                style("Overwrite cancelled — no file written.").yellow()
+            );
         }
     }
 

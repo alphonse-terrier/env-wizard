@@ -41,7 +41,11 @@ pub fn markdown_to_terminal(input: &str) -> String {
 
         // List item: `- x` / `* x` / `+ x` → `• x` (indent preserved).
         if let Some((indent, content)) = split_bullet(trimmed) {
-            out.push(format!("{indent}{} {}", style("•").cyan(), render_inline(content)));
+            out.push(format!(
+                "{indent}{} {}",
+                style("•").cyan(),
+                render_inline(content)
+            ));
             continue;
         }
 
@@ -144,7 +148,10 @@ mod tests {
 
     #[test]
     fn strips_bold_and_code_markers() {
-        assert_eq!(plain("Use **openssl** and `rand -hex 32`"), "Use openssl and rand -hex 32");
+        assert_eq!(
+            plain("Use **openssl** and `rand -hex 32`"),
+            "Use openssl and rand -hex 32"
+        );
     }
 
     #[test]
@@ -154,11 +161,31 @@ mod tests {
 
     #[test]
     fn code_fences_dropped_content_kept() {
-        assert_eq!(plain("```sh\nopenssl rand -hex 32\n```"), "    openssl rand -hex 32");
+        assert_eq!(
+            plain("```sh\nopenssl rand -hex 32\n```"),
+            "    openssl rand -hex 32"
+        );
     }
 
     #[test]
     fn bullets_become_dots() {
         assert_eq!(plain("- one\n- two"), "• one\n• two");
+    }
+
+    #[test]
+    fn nested_bold_inside_bullet() {
+        assert_eq!(plain("- set **PORT** now"), "• set PORT now");
+    }
+
+    #[test]
+    fn blockquote_marker_removed() {
+        assert_eq!(plain("> note this"), "  note this");
+    }
+
+    #[test]
+    fn unmatched_markers_left_literal() {
+        // A lone backtick / asterisk with no closing pair stays as-is.
+        assert_eq!(plain("use ` carefully"), "use ` carefully");
+        assert_eq!(plain("2 * 3 = 6"), "2 * 3 = 6");
     }
 }

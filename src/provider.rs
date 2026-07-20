@@ -9,6 +9,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use console::style;
@@ -69,7 +70,12 @@ pub fn config_path() -> PathBuf {
         .ok()
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".config")))
+        .or_else(dirs::config_dir)
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join(".config"))
+        })
         .unwrap_or_else(|| PathBuf::from(".config"));
     base.join("env-wizard").join("config.toml")
 }
@@ -82,8 +88,8 @@ pub fn load() -> Result<Option<Config>> {
     }
     let text = std::fs::read_to_string(&path)
         .with_context(|| format!("failed to read config {}", path.display()))?;
-    let cfg: Config = toml::from_str(&text)
-        .with_context(|| format!("invalid config in {}", path.display()))?;
+    let cfg: Config =
+        toml::from_str(&text).with_context(|| format!("invalid config in {}", path.display()))?;
     Ok(Some(cfg))
 }
 
@@ -194,17 +200,18 @@ pub fn configure_interactive() -> Result<Config> {
                 .items(&["as the last argument", "piped to stdin"])
                 .default(0)
                 .interact()?;
-            let args: Vec<String> = args_raw
-                .split_whitespace()
-                .map(|s| s.to_string())
-                .collect();
+            let args: Vec<String> = args_raw.split_whitespace().map(|s| s.to_string()).collect();
             Config {
                 kind: "command".into(),
                 label: format!("{program} (CLI)"),
                 command: Some(CommandProvider {
                     program,
                     args,
-                    prompt_via: if via_idx == 0 { "arg".into() } else { "stdin".into() },
+                    prompt_via: if via_idx == 0 {
+                        "arg".into()
+                    } else {
+                        "stdin".into()
+                    },
                 }),
                 openai: None,
             }
@@ -287,20 +294,30 @@ fn run_command(c: &CommandProvider, prompt: &str) -> Result<String> {
     cmd.args(&c.args);
 
     let output = if c.prompt_via == "stdin" {
-        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
         let mut child = cmd.spawn().with_context(|| {
             format!(
                 "failed to launch `{}` — make sure it is installed and on your PATH",
                 c.program
             )
         })?;
-        child
+        let mut stdin = child
             .stdin
             .take()
-            .context("failed to open stdin of the provider command")?
-            .write_all(prompt.as_bytes())
-            .context("failed to write the prompt to the provider command")?;
-        child.wait_with_output().context("provider command failed")?
+            .context("failed to open stdin of the provider command")?;
+        // A child that ignores stdin may close it before we finish writing; a
+        // BrokenPipe here is harmless, so don't fail the hint on it.
+        match stdin.write_all(prompt.as_bytes()) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+            Err(e) => return Err(e).context("failed to write the prompt to the provider command"),
+        }
+        drop(stdin); // close stdin so the child sees EOF and can proceed
+        child
+            .wait_with_output()
+            .context("provider command failed")?
     } else {
         cmd.arg(prompt);
         cmd.output().with_context(|| {
@@ -330,7 +347,13 @@ fn run_http(o: &OpenaiProvider, prompt: &str) -> Result<String> {
         "messages": [{ "role": "user", "content": prompt }],
     });
 
-    let mut req = ureq::post(&url).set("Content-Type", "application/json");
+    // Bounded timeouts so a wrong/dead endpoint fails fast instead of hanging.
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout(Duration::from_secs(60))
+        .build();
+
+    let mut req = agent.post(&url).set("Content-Type", "application/json");
     if !o.api_key_env.is_empty() {
         let key = std::env::var(&o.api_key_env).with_context(|| {
             format!(
@@ -343,7 +366,7 @@ fn run_http(o: &OpenaiProvider, prompt: &str) -> Result<String> {
 
     let resp = req
         .send_json(body)
-        .with_context(|| format!("request to {url} failed"))?;
+        .with_context(|| format!("request to {url} failed (endpoint unreachable or timed out?)"))?;
     let json: serde_json::Value = resp.into_json().context("invalid JSON from provider")?;
 
     let content = json["choices"][0]["message"]["content"]
@@ -355,4 +378,40 @@ fn run_http(o: &OpenaiProvider, prompt: &str) -> Result<String> {
         anyhow::bail!("provider returned an empty message");
     }
     Ok(content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_rejects_unknown_kind() {
+        let cfg = Config {
+            kind: "nope".into(),
+            label: String::new(),
+            command: None,
+            openai: None,
+        };
+        let err = run(&cfg, "hi").unwrap_err().to_string();
+        assert!(err.contains("unknown provider kind"), "{err}");
+    }
+
+    #[test]
+    fn run_requires_matching_section() {
+        let cfg = Config {
+            kind: "command".into(),
+            label: String::new(),
+            command: None,
+            openai: None,
+        };
+        let err = run(&cfg, "hi").unwrap_err().to_string();
+        assert!(err.contains("no [command] section"), "{err}");
+    }
+
+    #[test]
+    fn config_path_honours_explicit_env() {
+        std::env::set_var("ENV_WIZARD_CONFIG", "/tmp/ew-explicit.toml");
+        assert_eq!(config_path(), PathBuf::from("/tmp/ew-explicit.toml"));
+        std::env::remove_var("ENV_WIZARD_CONFIG");
+    }
 }

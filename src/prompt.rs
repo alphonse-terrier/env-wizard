@@ -13,8 +13,8 @@ use crate::render;
 
 /// Input result: on `q`, we stop and return `Quit`.
 pub enum Outcome {
-    /// All variables were processed: (key, value) pairs.
-    Completed(Vec<(String, String)>),
+    /// All variables were processed: (variable, value) pairs, in order.
+    Completed(Vec<(EnvVar, String)>),
     /// The user asked to quit.
     Quit,
 }
@@ -30,7 +30,7 @@ pub struct Options {
 /// Interactively asks for each variable.
 pub fn run(repo_root: &Path, vars: &[EnvVar], opts: &Options) -> Result<Outcome> {
     let theme = ColorfulTheme::default();
-    let mut answers: Vec<(String, String)> = Vec::new();
+    let mut answers: Vec<(EnvVar, String)> = Vec::new();
 
     // The legend only matters for the interactive flow.
     if !opts.accept_defaults {
@@ -41,7 +41,7 @@ pub fn run(repo_root: &Path, vars: &[EnvVar], opts: &Options) -> Result<Outcome>
         // Non-interactive mode: take the default value as-is.
         if opts.accept_defaults {
             let value = var.default.clone().unwrap_or_default();
-            answers.push((var.key.clone(), value));
+            answers.push((var.clone(), value));
             continue;
         }
 
@@ -61,12 +61,22 @@ pub fn run(repo_root: &Path, vars: &[EnvVar], opts: &Options) -> Result<Outcome>
             let raw = input.interact_text()?;
             let trimmed = raw.trim();
 
-            match trimmed {
-                "q" | ":q" => return Ok(Outcome::Quit),
-                "?" | "/hint" if !opts.no_ai => {
-                    match hint::get_hint(repo_root, &var.key, &var.description) {
+            if trimmed == "q" || trimmed == ":q" {
+                return Ok(Outcome::Quit);
+            }
+
+            // `?` / `/hint` / `/ask`, optionally followed by a free-text question.
+            if !opts.no_ai {
+                if let Some(question) = parse_ask_command(trimmed) {
+                    match hint::get_hint(repo_root, &var.key, &var.description, question.as_deref())
+                    {
                         Ok(h) => {
-                            println!("\n{}", style("💡 Hint").cyan().bold());
+                            let title = if question.is_some() {
+                                "💬 Answer"
+                            } else {
+                                "💡 Hint"
+                            };
+                            println!("\n{}", style(title).cyan().bold());
                             println!("{}\n", render::markdown_to_terminal(&h));
                         }
                         Err(e) => {
@@ -76,14 +86,45 @@ pub fn run(repo_root: &Path, vars: &[EnvVar], opts: &Options) -> Result<Outcome>
                     // Re-ask the same variable.
                     continue;
                 }
-                _ => break raw,
             }
+
+            break raw;
         };
 
-        answers.push((var.key.clone(), value));
+        answers.push((var.clone(), value));
     }
 
     Ok(Outcome::Completed(answers))
+}
+
+/// Parses an AI-hint command.
+///
+/// Returns `None` when the input is a normal value. Returns `Some(None)` for a
+/// bare hint request (`?`, `/hint`, `/ask`), and `Some(Some(question))` when a
+/// free-text question follows (`? what format?`, `/ask where do I get this?`).
+fn parse_ask_command(input: &str) -> Option<Option<String>> {
+    let t = input.trim();
+
+    // `?` with the question attached directly or after a space.
+    if let Some(rest) = t.strip_prefix('?') {
+        let q = rest.trim();
+        return Some((!q.is_empty()).then(|| q.to_string()));
+    }
+
+    // `/hint` / `/ask`, alone or followed by whitespace + a question.
+    for cmd in ["/hint", "/ask"] {
+        if t == cmd {
+            return Some(None);
+        }
+        if let Some(rest) = t.strip_prefix(cmd) {
+            if rest.starts_with(char::is_whitespace) {
+                let q = rest.trim();
+                return Some((!q.is_empty()).then(|| q.to_string()));
+            }
+        }
+    }
+
+    None
 }
 
 /// Prints the banner and a legend of controls, one key per line.
@@ -93,6 +134,7 @@ fn print_legend(no_ai: bool) {
     print_control("Enter", "accept the suggested default");
     if !no_ai {
         print_control("?", "ask the AI for a hint");
+        print_control("? …", "ask the AI a specific question about this variable");
     }
     print_control("(nothing)", "leave this variable empty");
     print_control("q", "quit without saving");
@@ -110,4 +152,40 @@ fn print_control(key: &str, description: &str) {
     // Fixed-width keycap so every row lines up, rendered as reversed video.
     let cap = format!(" {key:^9} ");
     println!("  {}  {}", style(cap).reverse(), style(description).dim());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_ask_command;
+
+    #[test]
+    fn bare_hint_commands() {
+        assert_eq!(parse_ask_command("?"), Some(None));
+        assert_eq!(parse_ask_command("/hint"), Some(None));
+        assert_eq!(parse_ask_command("/ask"), Some(None));
+    }
+
+    #[test]
+    fn hint_with_question() {
+        assert_eq!(
+            parse_ask_command("? what format is expected?"),
+            Some(Some("what format is expected?".to_string()))
+        );
+        assert_eq!(
+            parse_ask_command("?where do I get it"),
+            Some(Some("where do I get it".to_string()))
+        );
+        assert_eq!(
+            parse_ask_command("/ask which service issues this"),
+            Some(Some("which service issues this".to_string()))
+        );
+    }
+
+    #[test]
+    fn normal_values_are_not_commands() {
+        assert_eq!(parse_ask_command("postgres://localhost/db"), None);
+        assert_eq!(parse_ask_command("8080"), None);
+        // `/askew` is not the `/ask` command (no whitespace boundary).
+        assert_eq!(parse_ask_command("/askew"), None);
+    }
 }

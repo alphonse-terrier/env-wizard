@@ -122,6 +122,7 @@ env-wizard
 At each prompt, type:
   ┃  Enter   ┃  accept the suggested default
   ┃    ?     ┃  ask the AI for a hint
+  ┃   ? …    ┃  ask the AI a specific question about this variable
   ┃ (nothing)┃  leave this variable empty
   ┃    q     ┃  quit without saving
 Change the AI provider anytime with `env-wizard config`.
@@ -144,7 +145,9 @@ This signs your session cookies. Generate one with:
 ```
 
 > The `💡 Hint` is your AI's answer, rendered cleanly in the terminal — headings,
-> bullets, and commands, with the raw Markdown stripped away.
+> bullets, and commands, with the raw Markdown stripped away. Need something specific?
+> Type your question after the `?` (e.g. `? what format is expected?`) and the AI
+> answers it directly.
 
 ## 💛 Why you'll like it
 
@@ -153,12 +156,14 @@ This signs your session cookies. Generate one with:
 - 🤖 **Your AI, your rules** — hints come from whatever provider you pick: Claude,
   OpenAI, a local Ollama model, or any OpenAI-compatible endpoint. Nothing is
   hardcoded, and env-wizard stores **no** API keys.
-- 🔒 **Local-friendly** — point it at `http://localhost:11434` (Ollama, LM Studio…)
-  and your secrets never leave your machine.
+- 🔒 **Private by design** — your `.env` values are **never** sent to any AI, cloud or
+  local. And with a local provider (Ollama, LM Studio at `http://localhost:11434`) the
+  whole prompt stays on your machine — nothing leaves at all.
 - 🧠 **Repo-aware hints** — the AI is fed your README, common config files, and every
   place the variable appears in the code, so its advice is specific — not generic.
-- 💾 **Safe writes** — confirms before overwriting an existing `.env`, and keeps a
-  `.env.bak`.
+- 💾 **Safe, tidy writes** — confirms before overwriting an existing `.env`, keeps a
+  `.env.bak`, carries your `.env.example` comments over each variable, and writes the
+  file `0600` (owner-only) on Unix.
 - 🪶 **One small binary** — written in Rust. No runtime, no daemon, starts instantly.
 
 ## 🧩 Choose your AI
@@ -179,9 +184,10 @@ Two equivalent ways — pick whichever you like:
 env-wizard config          # re-run the interactive picker
 ```
 
-…or edit the config file by hand. It lives at
-`$XDG_CONFIG_HOME/env-wizard/config.toml` (falling back to
-`~/.config/env-wizard/config.toml`; override with `$ENV_WIZARD_CONFIG`):
+…or edit the config file by hand. Its location is, in order: `$ENV_WIZARD_CONFIG` if
+set, else `$XDG_CONFIG_HOME/env-wizard/config.toml`, else your OS config dir —
+`~/.config/env-wizard/config.toml` on Linux, `~/Library/Application
+Support/env-wizard/config.toml` on macOS, `%APPDATA%\env-wizard\config.toml` on Windows:
 
 ```toml
 kind  = "command"          # "command" | "openai"
@@ -208,12 +214,13 @@ env-wizard
 
 **At each prompt:**
 
-| Input          | Effect                                   |
-| -------------- | ---------------------------------------- |
-| `Enter`        | Accept the shown default                 |
-| `?` / `/hint`  | Ask the AI for a hint, then re-prompt    |
-| *(empty)*      | Leave the variable empty                 |
-| `q`            | Quit without writing                     |
+| Input                        | Effect                                            |
+| ---------------------------- | ------------------------------------------------- |
+| `Enter`                      | Accept the shown default                          |
+| `?` / `/hint`                | Ask the AI for a hint, then re-prompt             |
+| `? <question>` / `/ask <question>` | Ask the AI a **specific question** about this variable |
+| *(empty)*                    | Leave the variable empty                          |
+| `q`                          | Quit without writing                              |
 
 **Options:**
 
@@ -247,16 +254,19 @@ env-wizard
 
 ## ❓ FAQ
 
-**Does my data leave my machine?**
-Only if you choose a cloud provider. Pick a local one (Ollama, LM Studio) and the
-prompt never leaves your laptop. env-wizard itself has no telemetry and stores no
-API keys — cloud CLIs and endpoints use their own configured credentials.
+**What exactly is sent to the AI, and does it leave my machine?**
+Only what's needed for a hint: the variable name, its `.env.example` comment, and repo
+context (your README, common config files, and code lines that mention the variable).
+The values you type and your existing `.env` are **never** sent. With a **local**
+provider (Ollama, LM Studio) even that context stays on your machine — only a **cloud**
+provider receives it over the network. env-wizard has no telemetry and stores no API
+keys; providers use their own configured credentials.
 
 **Could my existing `.env` secrets be sent to the AI?**
-No. When building context for a hint, env-wizard deliberately **skips real dotenv
-files** (`.env`, `.env.local`, `.env.production`, …) — only template files like
-`.env.example` are ever read. So values already in your `.env` are never included in
-a prompt. (See `is_secret_env_file` in `src/hint.rs`.)
+No. When building context, env-wizard deliberately **skips real dotenv files**
+(`.env`, `.env.local`, `.env.production`, …) — only template files like `.env.example`
+are ever read. So values already in your `.env` are never included in a prompt.
+(See `is_secret_env_file` in `src/hint.rs`.)
 
 **I don't have an AI CLI installed — is env-wizard still useful?**
 Yes. The whole guided flow (inline comment hints, defaults, safe writing) works
@@ -264,7 +274,9 @@ without any AI. If you press `?` and the chosen provider isn't reachable, you ge
 clear error and the wizard simply continues. You can also run with `--no-ai`.
 
 **Which platforms are supported?**
-macOS and Linux. (Windows isn't tested yet — contributions welcome.)
+Prebuilt binaries and Homebrew cover macOS and Linux. Windows works via
+`cargo install` (the code is cross-platform) but isn't part of the release binaries
+yet — feedback welcome.
 
 ## 📦 Requirements
 
