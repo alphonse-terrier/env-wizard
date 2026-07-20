@@ -96,6 +96,12 @@ fn print_legend(no_ai: bool) {
     }
     print_control("(nothing)", "leave this variable empty");
     print_control("q", "quit without saving");
+    if !no_ai {
+        println!(
+            "{}",
+            style("Change the AI provider anytime with `env-wizard config`.").dim()
+        );
+    }
     println!();
 }
 
