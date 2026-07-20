@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-20
+
 ### Added
 - Ask the AI a **specific question** about a variable: type `? <question>` or
   `/ask <question>` at a prompt (a bare `?` / `/hint` still gives the generic hint).
@@ -42,5 +44,6 @@ All notable changes to this project are documented here. The format is based on
 - Markdown-to-terminal rendering of AI answers.
 - Prebuilt binaries for macOS (arm64/x86_64) and Linux (x86_64 musl); Homebrew tap.
 
-[Unreleased]: https://github.com/alphonse-terrier/env-wizard/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/alphonse-terrier/env-wizard/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/alphonse-terrier/env-wizard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alphonse-terrier/env-wizard/releases/tag/v0.1.0
