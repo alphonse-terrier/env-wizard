@@ -9,6 +9,7 @@ use dialoguer::{theme::ColorfulTheme, Input};
 
 use crate::hint;
 use crate::parser::EnvVar;
+use crate::render;
 
 /// Input result: on `q`, we stop and return `Quit`.
 pub enum Outcome {
@@ -65,8 +66,8 @@ pub fn run(repo_root: &Path, vars: &[EnvVar], opts: &Options) -> Result<Outcome>
                 "?" | "/hint" if !opts.no_ai => {
                     match hint::get_hint(repo_root, &var.key, &var.description) {
                         Ok(h) => {
-                            println!("\n{}", style("💡 Hint:").cyan().bold());
-                            println!("{}\n", style(&h).cyan());
+                            println!("\n{}", style("💡 Hint").cyan().bold());
+                            println!("{}\n", render::markdown_to_terminal(&h));
                         }
                         Err(e) => {
                             eprintln!("{} {e:#}", style("⚠  No hint:").yellow());
@@ -85,22 +86,22 @@ pub fn run(repo_root: &Path, vars: &[EnvVar], opts: &Options) -> Result<Outcome>
     Ok(Outcome::Completed(answers))
 }
 
-/// Prints the legend of available commands.
+/// Prints the banner and a legend of controls, one key per line.
 fn print_legend(no_ai: bool) {
     println!("{}", style("env-wizard").bold().green());
-    let hint_part = if no_ai {
-        String::new()
-    } else {
-        format!("  {} AI hint", style("?").bold())
-    };
-    println!(
-        "{}",
-        style(format!(
-            "  {} accept default{hint_part}  {} leave empty  {} quit",
-            style("Enter").bold(),
-            style("(empty)").bold(),
-            style("q").bold(),
-        ))
-        .dim()
-    );
+    println!("{}", style("At each prompt, type:").dim());
+    print_control("Enter", "accept the suggested default");
+    if !no_ai {
+        print_control("?", "ask the AI for a hint");
+    }
+    print_control("(nothing)", "leave this variable empty");
+    print_control("q", "quit without saving");
+    println!();
+}
+
+/// Prints one control row: a highlighted "keycap" and its description.
+fn print_control(key: &str, description: &str) {
+    // Fixed-width keycap so every row lines up, rendered as reversed video.
+    let cap = format!(" {key:^9} ");
+    println!("  {}  {}", style(cap).reverse(), style(description).dim());
 }

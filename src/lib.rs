@@ -6,4 +6,5 @@ pub mod hint;
 pub mod parser;
 pub mod prompt;
 pub mod provider;
+pub mod render;
 pub mod writer;
