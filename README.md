@@ -199,6 +199,12 @@ Only if you choose a cloud provider. Pick a local one (Ollama, LM Studio) and th
 prompt never leaves your laptop. env-wizard itself has no telemetry and stores no
 API keys — cloud CLIs and endpoints use their own configured credentials.
 
+**Could my existing `.env` secrets be sent to the AI?**
+No. When building context for a hint, env-wizard deliberately **skips real dotenv
+files** (`.env`, `.env.local`, `.env.production`, …) — only template files like
+`.env.example` are ever read. So values already in your `.env` are never included in
+a prompt. (See `is_secret_env_file` in `src/hint.rs`.)
+
 **I don't have an AI CLI installed — is env-wizard still useful?**
 Yes. The whole guided flow (inline comment hints, defaults, safe writing) works
 without any AI. If you press `?` and the chosen provider isn't reachable, you get a

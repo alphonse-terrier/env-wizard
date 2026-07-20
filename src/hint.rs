@@ -138,13 +138,36 @@ fn grep_variable(repo_root: &Path, var_key: &str) -> String {
 }
 
 /// Directories/files to exclude from the walk.
+///
+/// Beyond the usual build/VCS dirs, this deliberately skips real dotenv files
+/// (`.env`, `.env.local`, `.env.production`, …) so their secret *values* can
+/// never end up in a prompt sent to the AI. Template files (`.env.example`,
+/// `.env.sample`, …) are safe and left in.
 fn is_excluded(path: &Path) -> bool {
     path.file_name()
         .map(|n| {
             let n = n.to_string_lossy();
-            n == ".git" || n == "target" || n == "node_modules" || n == ".venv" || n == "vendor"
+            n == ".git"
+                || n == "target"
+                || n == "node_modules"
+                || n == ".venv"
+                || n == "vendor"
+                || is_secret_env_file(&n)
         })
         .unwrap_or(false)
+}
+
+/// True for dotenv files that may contain real secrets — everything named
+/// `.env` or `.env.*` except the safe template variants.
+fn is_secret_env_file(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    if lower != ".env" && !lower.starts_with(".env.") {
+        return false;
+    }
+    !(lower.ends_with(".example")
+        || lower.ends_with(".sample")
+        || lower.ends_with(".template")
+        || lower.ends_with(".dist"))
 }
 
 /// Builds the textual prompt sent to `claude`.
@@ -199,4 +222,47 @@ fn truncate(s: &str, limit: usize) -> String {
         end -= 1;
     }
     format!("{}\n[… truncated …]", &s[..end])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classifies_secret_vs_template_env_files() {
+        assert!(is_secret_env_file(".env"));
+        assert!(is_secret_env_file(".env.local"));
+        assert!(is_secret_env_file(".env.production"));
+        assert!(is_secret_env_file(".ENV")); // case-insensitive
+        assert!(!is_secret_env_file(".env.example"));
+        assert!(!is_secret_env_file(".env.sample"));
+        assert!(!is_secret_env_file(".env.template"));
+        assert!(!is_secret_env_file("settings.py"));
+    }
+
+    #[test]
+    fn grep_never_reads_dotenv_secrets() {
+        let dir = std::env::temp_dir().join("env-wizard-grep-secret-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // A real .env with a secret, plus a source file that references the var.
+        std::fs::write(dir.join(".env"), "API_TOKEN=supersecret-should-not-leak\n").unwrap();
+        std::fs::write(dir.join(".env.local"), "API_TOKEN=also-secret\n").unwrap();
+        std::fs::write(dir.join("app.py"), "token = os.environ['API_TOKEN']\n").unwrap();
+
+        let hits = grep_variable(&dir, "API_TOKEN");
+
+        assert!(hits.contains("app.py"), "should surface the source reference");
+        assert!(
+            !hits.contains("supersecret-should-not-leak") && !hits.contains("also-secret"),
+            "must never include values read from .env files: {hits}"
+        );
+        // No hit line should originate from a dotenv file (paths are `<file>:<n>:`).
+        assert!(
+            !hits.contains(".env:") && !hits.contains(".env.local:"),
+            "must not read any .env file: {hits}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

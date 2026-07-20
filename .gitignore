@@ -1,2 +1,4 @@
 /target
+/target-linux
+/dist
 *.env.bak
