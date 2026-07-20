@@ -12,29 +12,71 @@ local) for a repo-aware hint the moment you're stuck. Then it writes your `.env`
 ![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white)
 ![AI: cloud or local](https://img.shields.io/badge/AI-cloud%20or%20local-8A2BE2)
 ![Telemetry: none](https://img.shields.io/badge/telemetry-none-brightgreen)
-![Platform: macOS · Linux](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux-lightgrey)
+![Platform: macOS · Linux · Windows](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)
 
 </div>
 
 ---
 
-## ⚡ Install in one line
+## ⚡ Install
+
+Pick the method for your OS — then run `env-wizard` inside any repo that has a
+`.env.example`.
+
+### 🍎 macOS
+
+**Homebrew** (recommended):
+
+```sh
+brew tap alphonse-terrier/env-wizard
+brew install env-wizard
+```
+
+<details>
+<summary>Or download a prebuilt binary</summary>
+
+```sh
+# Apple Silicon (M1/M2/M3…). For an Intel Mac, swap aarch64 → x86_64.
+curl -L https://github.com/alphonse-terrier/env-wizard/releases/download/v0.1.0/env-wizard-v0.1.0-aarch64-apple-darwin.tar.gz | tar xz
+sudo mv env-wizard-v0.1.0-aarch64-apple-darwin/env-wizard /usr/local/bin/
+```
+
+</details>
+
+### 🐧 Linux
+
+**Homebrew** (if you use it):
+
+```sh
+brew tap alphonse-terrier/env-wizard
+brew install env-wizard
+```
+
+**Prebuilt static binary** (x86_64, no dependencies):
+
+```sh
+curl -L https://github.com/alphonse-terrier/env-wizard/releases/download/v0.1.0/env-wizard-v0.1.0-x86_64-unknown-linux-musl.tar.gz | tar xz
+sudo mv env-wizard-v0.1.0-x86_64-unknown-linux-musl/env-wizard /usr/local/bin/
+```
+
+### 🪟 Windows
+
+Install with Cargo (needs the [Rust toolchain](https://rustup.rs)):
+
+```powershell
+cargo install --git https://github.com/alphonse-terrier/env-wizard
+```
+
+### 📦 Any OS — with Cargo
+
+Works everywhere Rust runs:
 
 ```sh
 cargo install --git https://github.com/alphonse-terrier/env-wizard
 ```
 
-Then, in any repo that has a `.env.example`:
-
-```sh
-cd my-freshly-cloned-project
-env-wizard
-```
-
-That's it. 🎉
-
 <details>
-<summary>Build from source instead</summary>
+<summary>Build from a local clone</summary>
 
 ```sh
 git clone https://github.com/alphonse-terrier/env-wizard
@@ -43,6 +85,17 @@ cargo install --path .
 ```
 
 </details>
+
+> **Verify a download** against [`SHA256SUMS`](https://github.com/alphonse-terrier/env-wizard/releases/latest) on the release page.
+
+### First run
+
+```sh
+cd my-freshly-cloned-project
+env-wizard
+```
+
+That's it. 🎉
 
 ---
 
@@ -215,7 +268,8 @@ macOS and Linux. (Windows isn't tested yet — contributions welcome.)
 
 ## 📦 Requirements
 
-- A Rust toolchain to build/install (`cargo`).
+- Nothing extra for the Homebrew or prebuilt-binary installs. A Rust toolchain
+  (`cargo`) is only needed for the Cargo / from-source methods.
 - For the `?` hint only: the provider you pick must be reachable — the chosen CLI on
   your `PATH`, or the HTTP endpoint up with its API key set. If not, everything else
   still works and the hint reports a clear error.
