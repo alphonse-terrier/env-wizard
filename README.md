@@ -2,120 +2,123 @@
 
 # 🧙 env-wizard
 
-**Stop guessing what goes in your `.env`.**
+### Never guess what goes in a `.env` again.
 
-A tiny, fast CLI that walks you through a freshly cloned repo's `.env.example`
-one variable at a time — showing the inline docs as you go, and calling *your*
-AI (cloud or local) for a hint whenever you're stuck.
+**env-wizard** walks you through a freshly cloned repo's `.env.example` one variable
+at a time — showing the inline docs as you go, and asking **your** AI (cloud *or*
+local) for a repo-aware hint the moment you're stuck. Then it writes your `.env`.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white)
+![AI: cloud or local](https://img.shields.io/badge/AI-cloud%20or%20local-8A2BE2)
+![Telemetry: none](https://img.shields.io/badge/telemetry-none-brightgreen)
+![Platform: macOS · Linux](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux-lightgrey)
 
 </div>
 
 ---
 
-## The problem
-
-You clone a repo. There's a `.env.example` with fifteen variables and terse
-comments. Half of them you can guess; the other half send you spelunking through
-the README, `docker-compose.yml`, and the source just to find out what
-`REDIS_TLS_URL` is supposed to look like. Twenty minutes later you're still not
-running.
-
-## The fix
+## ⚡ Install in one line
 
 ```sh
+cargo install --git https://github.com/alphonse-terrier/env-wizard
+```
+
+Then, in any repo that has a `.env.example`:
+
+```sh
+cd my-freshly-cloned-project
 env-wizard
 ```
 
-env-wizard reads `.env.example`, asks for each variable in turn, shows its
-comment as a hint, and — when you type `?` — asks an AI that has *already read
-your repo* what to put and how to get it. Then it writes `.env` for you.
+That's it. 🎉
 
+<details>
+<summary>Build from source instead</summary>
+
+```sh
+git clone https://github.com/alphonse-terrier/env-wizard
+cd env-wizard
+cargo install --path .
 ```
+
+</details>
+
+---
+
+**Jump to:** [Problem](#-the-problem) · [Demo](#-demo) · [Features](#-why-youll-like-it) · [Choose your AI](#-choose-your-ai) · [Usage](#-usage-reference) · [How it works](#-how-it-works) · [FAQ](#-faq)
+
+## 🤔 The problem
+
+You clone a repo. Its `.env.example` has fifteen variables and terse comments. Half
+you can guess; the rest send you spelunking through the README, `docker-compose.yml`,
+and the source just to learn what `REDIS_TLS_URL` should look like. Twenty minutes
+later, you *still* aren't running.
+
+## ✅ The fix
+
+`env-wizard` reads `.env.example`, asks for each variable in turn, shows its comment
+as a hint, and — when you type `?` — asks an AI that has **already read your repo**
+what to put and how to get it. Then it writes `.env` for you, safely.
+
+## 🎬 Demo
+
+```console
+$ env-wizard
 env-wizard
-  Enter accept default   ? AI hint   (empty) leave empty   q quit
+At each prompt, type:
+  ┃  Enter   ┃  accept the suggested default
+  ┃    ?     ┃  ask the AI for a hint
+  ┃ (nothing)┃  leave this variable empty
+  ┃    q     ┃  quit without saving
+Change the AI provider anytime with `env-wizard config`.
 
   # Secret used to sign session cookies (32+ chars)
 ? SECRET_KEY › ?
 
-💡 Hint:
-This signs your session cookies. Generate a value with:
-    openssl rand -hex 32
-and paste the 64-character hex string here.
+💡 Hint
+SECRET_KEY
+This signs your session cookies. Generate one with:
 
-? SECRET_KEY › 9f2c…            ← you paste the real value
-✔ SECRET_KEY · 9f2c…
+    openssl rand -hex 32
+
+ • Must be at least 32 characters
+ • Keep it secret — put it in .env, never commit it
+
+? SECRET_KEY › 9f2c8a…                ← you paste the real value
+✔ SECRET_KEY · 9f2c8a…
 ✓ Wrote .env
 ```
 
-## Why you'll like it
+> The `💡 Hint` is your AI's answer, rendered cleanly in the terminal — headings,
+> bullets, and commands, with the raw Markdown stripped away.
 
-- 🧭 **Guided, not guesswork** — every variable's `.env.example` comment is shown
-  inline as a hint, *before* you ever call the AI.
+## 💛 Why you'll like it
+
+- 🧭 **Guided, not guesswork** — every variable's `.env.example` comment shows inline
+  as a hint, *before* you ever call the AI.
 - 🤖 **Your AI, your rules** — hints come from whatever provider you pick: Claude,
   OpenAI, a local Ollama model, or any OpenAI-compatible endpoint. Nothing is
-  hardcoded and no keys are stored by env-wizard.
-- 🔒 **Local-friendly** — point it at `http://localhost:11434` and your secrets
-  never leave your machine.
-- 🧠 **Repo-aware hints** — the AI is fed your README, common config files, and
-  every place the variable appears in the code, so its advice is specific.
-- 💾 **Safe writes** — confirms before overwriting an existing `.env` and keeps a
+  hardcoded, and env-wizard stores **no** API keys.
+- 🔒 **Local-friendly** — point it at `http://localhost:11434` (Ollama, LM Studio…)
+  and your secrets never leave your machine.
+- 🧠 **Repo-aware hints** — the AI is fed your README, common config files, and every
+  place the variable appears in the code, so its advice is specific — not generic.
+- 💾 **Safe writes** — confirms before overwriting an existing `.env`, and keeps a
   `.env.bak`.
-- 🪶 **One small binary** — written in Rust, no runtime, starts instantly.
+- 🪶 **One small binary** — written in Rust. No runtime, no daemon, starts instantly.
 
-## Install
+## 🧩 Choose your AI
 
-```sh
-cargo install --path .
-```
+The **first time** you press `?`, env-wizard asks which AI to use and remembers your
+choice. Two kinds are supported:
 
-## Usage
+| Kind | What it is | Presets |
+| ---- | ---------- | ------- |
+| **CLI command** | Pipes the prompt to a local/cloud CLI. Manages its own auth — no keys stored. | Claude (`claude -p`), Ollama (`ollama run <model>`), or any custom command |
+| **OpenAI-compatible HTTP** | `base_url` + `model` + an env var for the API key. | OpenAI, local Ollama (`http://localhost:11434/v1`), LM Studio, OpenRouter, Groq… |
 
-Run it at the root of a repo that has a `.env.example`:
-
-```sh
-env-wizard
-```
-
-At each prompt:
-
-| Input          | Effect                                   |
-| -------------- | ---------------------------------------- |
-| `Enter`        | Accept the shown default                 |
-| `?` / `/hint`  | Ask the AI for a hint, then re-prompt    |
-| *(empty)*      | Leave the variable empty                 |
-| `q`            | Quit without writing                     |
-
-The AI hint gathers context automatically — the README, common config files
-(`docker-compose*`, `Makefile`, `settings*`, `config*`, …) and every occurrence
-of the variable across the repo — then asks what value to set and how to obtain
-it.
-
-At the end, `.env` is written. If one already exists you're asked to confirm, and
-the previous file is saved as `.env.bak`.
-
-### Options
-
-| Flag                 | Description                                          |
-| -------------------- | ---------------------------------------------------- |
-| `-i, --input <PATH>` | Example file to read (default `.env.example`)        |
-| `-o, --output <PATH>`| Env file to write (default `.env`)                   |
-| `-y, --yes`          | Accept all defaults and overwrite without confirming |
-| `--no-ai`            | Disable the AI hint feature (no calls to a provider) |
-
-## AI provider
-
-The **first time** you request a hint (`?`), env-wizard asks which AI to use and
-remembers your choice. Two kinds are supported:
-
-- **CLI command** — pipes the prompt to a local/cloud CLI. Presets: Claude
-  (`claude -p`), Ollama (`ollama run <model>`), or any custom command. These
-  manage their own authentication; env-wizard stores no keys.
-- **OpenAI-compatible HTTP API** — `base_url` + `model` + an env var holding the
-  API key. Presets: OpenAI, local Ollama (`http://localhost:11434/v1`), or any
-  compatible endpoint (LM Studio, OpenRouter, Groq, …). For local endpoints the
-  key can be left empty.
-
-### Changing the provider
+### Changing your provider
 
 Two equivalent ways — pick whichever you like:
 
@@ -142,27 +145,84 @@ prompt_via = "arg"         # "arg" (append prompt) | "stdin" (pipe prompt)
 # api_key_env = "OPENAI_API_KEY"   # empty = no auth (e.g. local Ollama)
 ```
 
-## How it works
+## 📖 Usage reference
 
-```
-.env.example ──▶ parser ──▶ prompt loop ──▶ .env
-                               │
-                    type "?" ──┤
-                               ▼
-                   gather repo context (README, configs, grep)
-                               ▼
-                     your AI provider (CLI or HTTP)
-                               ▼
-                          hint shown inline
+Run it at the root of a repo that has a `.env.example`:
+
+```sh
+env-wizard
 ```
 
-## Requirements
+**At each prompt:**
 
-- A Rust toolchain to build.
-- For the `?` hint: whichever provider you pick must be reachable — the chosen
-  CLI on your PATH, or the HTTP endpoint up with its API key set. If it isn't,
-  everything else still works and the hint reports a clear error.
+| Input          | Effect                                   |
+| -------------- | ---------------------------------------- |
+| `Enter`        | Accept the shown default                 |
+| `?` / `/hint`  | Ask the AI for a hint, then re-prompt    |
+| *(empty)*      | Leave the variable empty                 |
+| `q`            | Quit without writing                     |
 
-## License
+**Options:**
 
-MIT
+| Flag                  | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `-i, --input <PATH>`  | Example file to read (default `.env.example`)        |
+| `-o, --output <PATH>` | Env file to write (default `.env`)                   |
+| `-y, --yes`           | Accept all defaults and overwrite without confirming |
+| `--no-ai`             | Disable the AI hint feature (no calls to a provider) |
+
+**Commands:**
+
+| Command          | Description                              |
+| ---------------- | ---------------------------------------- |
+| `env-wizard`     | Run the interactive `.env` filler        |
+| `env-wizard config` | Choose or change the AI provider      |
+
+## 🛠 How it works
+
+```
+.env.example ──▶ parse ──▶ prompt loop ──▶ .env
+                              │
+                   type "?" ──┤
+                              ▼
+              gather repo context (README + configs + grep)
+                              ▼
+                 your AI provider (CLI or HTTP)
+                              ▼
+                render the hint cleanly in the terminal
+```
+
+## ❓ FAQ
+
+**Does my data leave my machine?**
+Only if you choose a cloud provider. Pick a local one (Ollama, LM Studio) and the
+prompt never leaves your laptop. env-wizard itself has no telemetry and stores no
+API keys — cloud CLIs and endpoints use their own configured credentials.
+
+**I don't have an AI CLI installed — is env-wizard still useful?**
+Yes. The whole guided flow (inline comment hints, defaults, safe writing) works
+without any AI. If you press `?` and the chosen provider isn't reachable, you get a
+clear error and the wizard simply continues. You can also run with `--no-ai`.
+
+**Which platforms are supported?**
+macOS and Linux. (Windows isn't tested yet — contributions welcome.)
+
+## 📦 Requirements
+
+- A Rust toolchain to build/install (`cargo`).
+- For the `?` hint only: the provider you pick must be reachable — the chosen CLI on
+  your `PATH`, or the HTTP endpoint up with its API key set. If not, everything else
+  still works and the hint reports a clear error.
+
+## 🤝 Contributing
+
+Issues and PRs are welcome! Before opening a PR, please run:
+
+```sh
+cargo test
+cargo clippy --all-targets
+```
+
+## 📄 License
+
+[MIT](LICENSE) © Alphonse Terrier
