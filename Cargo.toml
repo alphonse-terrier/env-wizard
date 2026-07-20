@@ -2,7 +2,7 @@
 name = "env-wizard"
 version = "0.1.0"
 edition = "2021"
-description = "Interactive assistant to fill a .env from a .env.example, with AI hints via `claude -p`."
+description = "Interactive assistant to fill a .env from a .env.example, with AI hints from a configurable provider (cloud or local)."
 license = "MIT"
 
 [lib]
