@@ -196,6 +196,9 @@ This signs your session cookies. Generate one with:
 forgets the example. env-wizard reads the **source itself** — JS/TS, Python, Rust, Go,
 Ruby, PHP — to catch that before it costs you twenty minutes of debugging.
 
+<details>
+<summary>Show details</summary>
+
 ```console
 $ env-wizard scan
 Used in code but missing from .env.example (2):
@@ -233,6 +236,8 @@ Detected patterns:
 > reliably. As everywhere else, real `.env` files are never read — only source code.
 > (`src/scan.rs`)
 
+</details>
+
 ## 📄 TOML / YAML / JSON config templates
 
 Not every project configures itself through the environment. If yours ships a
@@ -241,6 +246,9 @@ structured example instead — `config.example.toml`, `settings.sample.yaml`,
 `.env.example`: one field at a time, dotted path shown as the prompt (`database.host`),
 the example's value as the default, and its comment (or JSONC `//`/`/* */` comment) as
 the hint.
+
+<details>
+<summary>Show details</summary>
 
 ```console
 $ env-wizard
@@ -270,6 +278,8 @@ format no matter what their content looks like. You can always be explicit with
 `--input`/`-o`. `--from-code` and `env-wizard scan` are dotenv-only, since a code
 scanner has nothing to say about config keys.
 
+</details>
+
 ## 🧩 Choose your AI
 
 The **first time** you press `?`, env-wizard asks which AI to use and remembers your
@@ -279,6 +289,9 @@ choice. Two kinds are supported:
 | ---- | ---------- | ------- |
 | **CLI command** | Pipes the prompt to a local/cloud CLI. Manages its own auth — no keys stored. | Claude (`claude -p`), Ollama (`ollama run <model>`), or any custom command |
 | **OpenAI-compatible HTTP** | `base_url` + `model` + an env var for the API key. | OpenAI, local Ollama (`http://localhost:11434/v1`), LM Studio, OpenRouter, Groq… |
+
+<details>
+<summary>Show details — changing your provider</summary>
 
 ### Changing your provider
 
@@ -308,6 +321,8 @@ prompt_via = "arg"         # "arg" (append prompt) | "stdin" (pipe prompt)
 # api_key_env = "OPENAI_API_KEY"   # empty = no auth (e.g. local Ollama)
 ```
 
+</details>
+
 ## 📖 Usage reference
 
 Run it at the root of a repo that has a `.env.example`:
@@ -315,6 +330,9 @@ Run it at the root of a repo that has a `.env.example`:
 ```sh
 env-wizard
 ```
+
+<details>
+<summary>Show details</summary>
 
 **At each prompt:**
 
@@ -344,7 +362,14 @@ env-wizard
 | `env-wizard config` | Choose or change the AI provider         |
 | `env-wizard scan`   | Audit code usage vs `.env.example`       |
 
+</details>
+
 ## 🛠 How it works
+
+A quick look at the request → hint pipeline:
+
+<details>
+<summary>Show details</summary>
 
 ```
 .env.example ──▶ parse ──▶ prompt loop ──▶ .env
@@ -358,7 +383,14 @@ env-wizard
                 render the hint cleanly in the terminal
 ```
 
+</details>
+
 ## ❓ FAQ
+
+Common questions about privacy, AI providers, and platform support:
+
+<details>
+<summary>Show details</summary>
 
 **What exactly is sent to the AI, and does it leave my machine?**
 Only what's needed for a hint: the variable name, its `.env.example` comment, and repo
@@ -383,6 +415,8 @@ clear error and the wizard simply continues. You can also run with `--no-ai`.
 Prebuilt binaries and Homebrew cover macOS and Linux. Windows works via
 `cargo install` (the code is cross-platform) but isn't part of the release binaries
 yet — feedback welcome.
+
+</details>
 
 ## 📦 Requirements
 
