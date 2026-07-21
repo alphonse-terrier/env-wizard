@@ -4,18 +4,12 @@
 
 ### Never guess what goes in a `.env` again.
 
-You clone a repo. Its `.env.example` has fifteen variables and terse comments — half
-you can guess, the rest send you spelunking through docs and source just to learn
-what `REDIS_TLS_URL` should look like. **env-wizard** fixes that: it walks you through
-the file one variable at a time, showing the inline docs as you go, and asking
-**your** AI (cloud *or* local) for a repo-aware hint the moment you're stuck. Then it
-writes your `.env` for you, safely.
+**env-wizard** walks you through `.env.example` one variable at a time — inline hints
+as you go, and **your** AI (cloud *or* local) on standby for anything unclear. Then it
+writes `.env` for you, safely.
 
-No `.env.example`, or an outdated one? env-wizard **scans your source code**
-(JS/TS, Python, Rust, Go, Ruby, PHP) to find the variables you actually use.
-
-Config in `config.example.toml`/`.yaml`/`.json` instead of `.env`? Same walkthrough —
-env-wizard reads the template and writes the real file, preserving every comment.
+No example file? It **scans your code** (JS/TS, Python, Rust, Go, Ruby, PHP) instead.
+Config in TOML/YAML/JSON? Same walkthrough, real file written, every comment kept.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white)
