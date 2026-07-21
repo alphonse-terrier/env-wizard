@@ -129,6 +129,16 @@ That's it. 🎉
 
 Here's what a real run looks like:
 
+![env-wizard walking through a SECRET_KEY prompt, asking the AI for a hint, then writing .env](docs/demo/demo.gif)
+
+> The `💡 Hint` is your AI's answer, rendered cleanly in the terminal — headings,
+> bullets, and commands, with the raw Markdown stripped away. Need something specific?
+> Type your question after the `?` (e.g. `? what format is expected?`) and the AI
+> answers it directly.
+
+<details>
+<summary>Prefer plain text? Here's the same run as a transcript</summary>
+
 ```console
 $ env-wizard
 env-wizard
@@ -157,10 +167,7 @@ This signs your session cookies. Generate one with:
 ✓ Wrote .env
 ```
 
-> The `💡 Hint` is your AI's answer, rendered cleanly in the terminal — headings,
-> bullets, and commands, with the raw Markdown stripped away. Need something specific?
-> Type your question after the `?` (e.g. `? what format is expected?`) and the AI
-> answers it directly.
+</details>
 
 ## 💛 Why you'll like it
 
