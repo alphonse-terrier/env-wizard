@@ -177,6 +177,10 @@ Three ways to use it:
 | `env-wizard` *(no `.env.example` present)* | **Fallback**: derives the variable list straight from the code and runs the wizard anyway. |
 | `env-wizard --from-code` | **Augment**: prompts for the example's variables *plus* any extras found in the code. |
 
+Before falling back to code detection, env-wizard also tries common example filename
+aliases when `--input` is omitted: `.env.sample`, `.env.dist`, `.env.template`, and
+`env.example` (no leading dot).
+
 Detected patterns:
 
 | Language | Detected |
@@ -271,7 +275,7 @@ env-wizard
 
 | Flag                  | Description                                          |
 | --------------------- | ---------------------------------------------------- |
-| `-i, --input <PATH>`  | Example file to read (default `.env.example`)        |
+| `-i, --input <PATH>`  | Example file to read. Omit it to auto-detect (`.env.example`, `.env.sample`, `.env.dist`, `.env.template`, `env.example`) |
 | `-o, --output <PATH>` | Env file to write (default `.env`)                   |
 | `-y, --yes`           | Accept all defaults and overwrite without confirming |
 | `--no-ai`             | Disable the AI hint feature (no calls to a provider) |

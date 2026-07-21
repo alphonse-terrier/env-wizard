@@ -14,6 +14,15 @@ use env_wizard::provider;
 use env_wizard::scan;
 use env_wizard::writer::{self, WriteOutcome};
 
+/// Common names for the example file, tried in order when `--input` is omitted.
+const EXAMPLE_ALIASES: &[&str] = &[
+    ".env.example",
+    ".env.sample",
+    ".env.dist",
+    ".env.template",
+    "env.example",
+];
+
 /// Interactive `.env` filler driven by your project's `.env.example`.
 #[derive(Parser, Debug)]
 #[command(name = "env-wizard", version, about)]
@@ -21,9 +30,10 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Path to the example file to read.
-    #[arg(short, long, default_value = ".env.example")]
-    input: PathBuf,
+    /// Path to the example file to read. If omitted, tries common names in
+    /// order: .env.example, .env.sample, .env.dist, .env.template, env.example.
+    #[arg(short, long)]
+    input: Option<PathBuf>,
 
     /// Path to the env file to write.
     #[arg(short, long, default_value = ".env")]
@@ -53,23 +63,24 @@ enum Commands {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let input = resolve_input_path(cli.input.as_deref());
 
     match cli.command {
         Some(Commands::Config) => {
             provider::configure_interactive()?;
             return Ok(());
         }
-        Some(Commands::Scan) => return run_scan(&cli.input),
+        Some(Commands::Scan) => return run_scan(&input),
         None => {}
     }
 
-    let repo_root = repo_root_of(&cli.input);
-    let vars = collect_vars(&cli, &repo_root)?;
+    let repo_root = repo_root_of(&input);
+    let vars = collect_vars(&cli, &input, &repo_root)?;
 
     if vars.is_empty() {
         println!(
             "{}",
-            style(format!("No variables found in {}.", cli.input.display())).yellow()
+            style(format!("No variables found in {}.", input.display())).yellow()
         );
         return Ok(());
     }
@@ -106,6 +117,37 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// Resolves which example file to read, relative to the current directory.
+///
+/// An explicit `--input` is honored verbatim — no substitution. Otherwise, the
+/// first [`EXAMPLE_ALIASES`] entry that exists on disk is used; if none exist,
+/// returns the conventional `.env.example` so downstream "no example" messaging
+/// (and the code-scan fallback) stays unchanged.
+fn resolve_input_path(explicit: Option<&Path>) -> PathBuf {
+    resolve_input_path_from(Path::new("."), explicit)
+}
+
+/// Same as [`resolve_input_path`], but checks alias existence under `base`
+/// instead of the current directory — lets tests probe a temp dir without
+/// mutating the process-global current directory.
+fn resolve_input_path_from(base: &Path, explicit: Option<&Path>) -> PathBuf {
+    if let Some(path) = explicit {
+        return path.to_path_buf();
+    }
+    for name in EXAMPLE_ALIASES {
+        if base.join(name).exists() {
+            if *name != EXAMPLE_ALIASES[0] {
+                println!(
+                    "{}",
+                    style(format!("Using {name} (no {} found).", EXAMPLE_ALIASES[0])).dim()
+                );
+            }
+            return PathBuf::from(name);
+        }
+    }
+    PathBuf::from(EXAMPLE_ALIASES[0])
+}
+
 /// The directory to scan / gather context from: the input file's parent, or cwd.
 fn repo_root_of(input: &Path) -> PathBuf {
     input
@@ -117,11 +159,11 @@ fn repo_root_of(input: &Path) -> PathBuf {
 
 /// Builds the list of variables to prompt for, applying the example file, the
 /// `--from-code` augmentation, and the no-example fallback.
-fn collect_vars(cli: &Cli, repo_root: &Path) -> Result<Vec<EnvVar>> {
-    let example = match std::fs::read_to_string(&cli.input) {
+fn collect_vars(cli: &Cli, input: &Path, repo_root: &Path) -> Result<Vec<EnvVar>> {
+    let example = match std::fs::read_to_string(input) {
         Ok(content) => Some(parser::parse(&content)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-        Err(e) => return Err(e).with_context(|| format!("could not read {}", cli.input.display())),
+        Err(e) => return Err(e).with_context(|| format!("could not read {}", input.display())),
     };
 
     match (example, cli.from_code) {
@@ -137,14 +179,14 @@ fn collect_vars(cli: &Cli, repo_root: &Path) -> Result<Vec<EnvVar>> {
                 anyhow::bail!(
                     "could not find {} and detected no environment variables in the code — \
                      run env-wizard from the repo root, or pass --input",
-                    cli.input.display()
+                    input.display()
                 );
             }
             println!(
                 "{}",
                 style(format!(
                     "No {} found — using {} variable(s) detected in the code.",
-                    cli.input.display(),
+                    input.display(),
                     found.len()
                 ))
                 .yellow()
@@ -257,4 +299,62 @@ fn run_scan(input: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A fresh, uniquely-named temp dir for a test; removed on drop.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("env-wizard-main-test-{name}"));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn explicit_input_always_wins() {
+        let dir = TempDir::new("explicit-wins");
+        std::fs::write(dir.0.join(".env.example"), "").unwrap();
+        std::fs::write(dir.0.join("foo.txt"), "").unwrap();
+
+        let resolved = resolve_input_path_from(&dir.0, Some(Path::new("foo.txt")));
+        assert_eq!(resolved, PathBuf::from("foo.txt"));
+    }
+
+    #[test]
+    fn alias_priority_prefers_conventional_default() {
+        let dir = TempDir::new("alias-priority");
+        std::fs::write(dir.0.join(".env.sample"), "").unwrap();
+        assert_eq!(
+            resolve_input_path_from(&dir.0, None),
+            PathBuf::from(".env.sample")
+        );
+
+        std::fs::write(dir.0.join(".env.example"), "").unwrap();
+        assert_eq!(
+            resolve_input_path_from(&dir.0, None),
+            PathBuf::from(".env.example")
+        );
+    }
+
+    #[test]
+    fn no_candidate_falls_back_to_conventional_default() {
+        let dir = TempDir::new("no-candidate");
+        assert_eq!(
+            resolve_input_path_from(&dir.0, None),
+            PathBuf::from(".env.example")
+        );
+    }
 }

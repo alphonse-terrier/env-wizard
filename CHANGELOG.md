@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Auto-detect common example filename aliases (`.env.sample`, `.env.dist`,
+  `.env.template`, `env.example`) when `--input` isn't passed, before falling back to
+  code detection. An explicit `--input` is always honored verbatim.
+
 ## [0.3.0] - 2026-07-21
 
 ### Added
