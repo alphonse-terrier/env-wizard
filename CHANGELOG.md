@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Support structured config **templates** as an alternative to `.env.example`:
+  `config.example.toml`, `settings.sample.yaml`, `appsettings.example.json` (or a
+  `.dist`/`.template` variant) get the same guided walkthrough and produce the real
+  file. Only the values you change are touched — comments, key order, and
+  indentation are preserved byte-for-byte for everything else. Only scalar fields
+  (string/number/bool) are prompted; arrays and untouched nested tables pass
+  through as-is. Auto-detected the same way as dotenv aliases (dotenv still takes
+  priority when both exist); `--from-code` and `env-wizard scan` remain dotenv-only.
+  The format itself (TOML/YAML/JSON) is detected by reading and parsing the
+  template's content, not just its filename — the extension is only a
+  fallback for when the content isn't decisive (e.g. empty). This means a
+  misnamed template (`config.example.json` that's actually TOML) or one with
+  no extension at all (`config.example`) is still detected correctly. Dotenv
+  filenames are never reinterpreted this way, even if their quoted values also
+  happen to parse as valid TOML. A field whose key is duplicated in the source
+  document is never offered for editing, since it can't be addressed
+  unambiguously on write-back. For YAML, a value written in quoted style
+  (`port: "5432"`) is always treated as a string — editing it can no longer
+  silently turn it into a number and drop the quotes — and filling in a
+  previously-empty value (`host:`) now correctly inserts the `key: value`
+  separator instead of producing an invalid `key:value`. For JSON, a replacement
+  value is only ever written as a bare number when it's valid JSON number syntax
+  (rejecting things like `007`, `+5`, `.5`, or `nan` that Rust would parse but
+  JSON wouldn't); anything else falls back to a quoted string so the file always
+  stays valid.
+
 ## [0.3.1] - 2026-07-21
 
 ### Added

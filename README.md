@@ -11,10 +11,14 @@ local) for a repo-aware hint the moment you're stuck. Then it writes your `.env`
 No `.env.example`, or an outdated one? env-wizard **scans your source code**
 (JS/TS, Python, Rust, Go, Ruby, PHP) to find the variables you actually use.
 
+Config in `config.example.toml`/`.yaml`/`.json` instead of `.env`? Same walkthrough —
+env-wizard reads the template and writes the real file, preserving every comment.
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white)
 ![AI: cloud or local](https://img.shields.io/badge/AI-cloud%20or%20local-8A2BE2)
 ![Code scan: 6 languages](https://img.shields.io/badge/code%20scan-6%20languages-2ea44f)
+![Formats: env · toml · yaml · json](https://img.shields.io/badge/formats-env%20%C2%B7%20toml%20%C2%B7%20yaml%20%C2%B7%20json-2ea44f)
 ![Telemetry: none](https://img.shields.io/badge/telemetry-none-brightgreen)
 ![Platform: macOS · Linux · Windows](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)
 
@@ -196,6 +200,43 @@ Detected patterns:
 > reliably. As everywhere else, real `.env` files are never read — only source code.
 > (`src/scan.rs`)
 
+## 📄 TOML / YAML / JSON config templates
+
+Not every project configures itself through the environment. If yours ships a
+structured example instead — `config.example.toml`, `settings.sample.yaml`,
+`appsettings.example.json` — env-wizard walks that the same way it walks
+`.env.example`: one field at a time, dotted path shown as the prompt (`database.host`),
+the example's value as the default, and its comment (or JSONC `//`/`/* */` comment) as
+the hint.
+
+```console
+$ env-wizard
+Using config.example.toml (no .env.example found).
+
+  # Hostname to connect to
+? database.host (localhost) › db.prod
+✔ database.port · 5432
+✔ database.enabled · true
+✓ Wrote config.toml
+```
+
+Only the values you actually change are touched — everything else (comments, key
+order, indentation, untouched siblings) comes out **byte-for-byte identical** to the
+example. Only scalar fields (string/number/bool) are prompted; arrays and nested
+tables you don't edit are carried over as-is.
+
+Detection is automatic: env-wizard reads the file and detects the format from its
+actual content (TOML/YAML/JSON), falling back to the file extension only when the
+content itself isn't decisive (e.g. empty). That means a misnamed template
+(`config.example.json` that's actually TOML) or one with no extension at all
+(`config.example`) still works. A template is still recognized by its filename
+(`example`/`sample`/`dist`/`template`) the same way it is for `.env.example`
+aliases — dotenv examples still take priority if both exist, and dotenv-shaped
+filenames (`.env`, `.env.example`, …) are never reinterpreted as a structured
+format no matter what their content looks like. You can always be explicit with
+`--input`/`-o`. `--from-code` and `env-wizard scan` are dotenv-only, since a code
+scanner has nothing to say about config keys.
+
 ## 💛 Why you'll like it
 
 - 🧭 **Guided, not guesswork** — every variable's `.env.example` comment shows inline
@@ -210,6 +251,8 @@ Detected patterns:
   place the variable appears in the code, so its advice is specific — not generic.
 - 🔎 **Catches drift** — `env-wizard scan` audits your `.env.example` against what's
   actually used in the code (6 languages), and can even work with **no example at all**.
+- 📄 **Not just `.env`** — TOML, YAML, and JSON config templates get the same guided
+  walkthrough, and only the values you change are ever touched.
 - 💾 **Safe, tidy writes** — confirms before overwriting an existing `.env`, keeps a
   `.env.bak`, carries your `.env.example` comments over each variable, and writes the
   file `0600` (owner-only) on Unix.
@@ -275,11 +318,11 @@ env-wizard
 
 | Flag                  | Description                                          |
 | --------------------- | ---------------------------------------------------- |
-| `-i, --input <PATH>`  | Example file to read. Omit it to auto-detect (`.env.example`, `.env.sample`, `.env.dist`, `.env.template`, `env.example`) |
-| `-o, --output <PATH>` | Env file to write (default `.env`)                   |
+| `-i, --input <PATH>`  | Example file to read. Omit it to auto-detect: dotenv aliases (`.env.example`, `.env.sample`, `.env.dist`, `.env.template`, `env.example`) first, then a `.toml`/`.yaml`/`.json` config template |
+| `-o, --output <PATH>` | File to write. Defaults to `.env` for a dotenv example, or the template's name with the marker stripped for a config template (`config.example.toml` → `config.toml`) |
 | `-y, --yes`           | Accept all defaults and overwrite without confirming |
 | `--no-ai`             | Disable the AI hint feature (no calls to a provider) |
-| `--from-code`         | Also prompt for variables discovered in the code     |
+| `--from-code`         | Also prompt for variables discovered in the code (dotenv only) |
 
 **Commands:**
 

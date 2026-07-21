@@ -28,6 +28,27 @@ pub fn write_env(
     entries: &[(EnvVar, String)],
     assume_yes: bool,
 ) -> Result<WriteOutcome> {
+    write_file(
+        output_path,
+        &render(entries),
+        assume_yes,
+        /* restrict = */ true,
+    )
+}
+
+/// Writes `content` to `output_path`, confirming overwrite and backing up any
+/// existing file exactly like [`write_env`], but format-agnostic: the caller
+/// supplies already-rendered text (dotenv or a structured config document).
+///
+/// `restrict` gates the Unix `0600` permission lockdown. Dotenv output always
+/// restricts (it holds secrets); structured config files usually don't, so
+/// callers writing those should pass `false`.
+pub fn write_file(
+    output_path: &Path,
+    content: &str,
+    assume_yes: bool,
+    restrict: bool,
+) -> Result<WriteOutcome> {
     if output_path.exists() && !assume_yes {
         let confirmed = Confirm::with_theme(&ColorfulTheme::default())
             .with_prompt(format!(
@@ -45,14 +66,17 @@ pub fn write_env(
         let backup = backup_path(output_path);
         std::fs::copy(output_path, &backup)
             .with_context(|| format!("failed to back up existing file to {}", backup.display()))?;
-        restrict_permissions(&backup);
+        if restrict {
+            restrict_permissions(&backup);
+        }
         println!("{} {}", style("↳ backup:").dim(), backup.display());
     }
 
-    let content = render(entries);
     std::fs::write(output_path, content)
         .with_context(|| format!("failed to write {}", output_path.display()))?;
-    restrict_permissions(output_path);
+    if restrict {
+        restrict_permissions(output_path);
+    }
 
     Ok(WriteOutcome::Written)
 }
@@ -176,6 +200,32 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             let mode = std::fs::metadata(&out).unwrap().permissions().mode();
             assert_eq!(mode & 0o777, 0o600, "written .env should be 0600");
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_file_does_not_restrict_perms_when_asked_not_to() {
+        let dir = std::env::temp_dir().join("env-wizard-writer-restrict-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("config.toml");
+
+        write_file(&out, "port = 8080\n", true, false).unwrap();
+
+        let content = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(content, "port = 8080\n");
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&out).unwrap().permissions().mode();
+            assert_ne!(
+                mode & 0o777,
+                0o600,
+                "config file written with restrict=false shouldn't be locked to 0600"
+            );
         }
 
         let _ = std::fs::remove_dir_all(&dir);

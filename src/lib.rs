@@ -2,6 +2,7 @@
 //!
 //! The modules are exposed so they can be exercised by integration tests.
 
+pub mod config;
 pub mod hint;
 pub mod parser;
 pub mod prompt;
