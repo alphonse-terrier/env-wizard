@@ -45,8 +45,8 @@ brew install env-wizard
 
 ```sh
 # Apple Silicon (M1/M2/M3…). For an Intel Mac, swap aarch64 → x86_64.
-curl -L https://github.com/alphonse-terrier/env-wizard/releases/download/v0.3.1/env-wizard-v0.3.1-aarch64-apple-darwin.tar.gz | tar xz
-sudo mv env-wizard-v0.3.1-aarch64-apple-darwin/env-wizard /usr/local/bin/
+curl -L https://github.com/alphonse-terrier/env-wizard/releases/download/v0.4.0/env-wizard-v0.4.0-aarch64-apple-darwin.tar.gz | tar xz
+sudo mv env-wizard-v0.4.0-aarch64-apple-darwin/env-wizard /usr/local/bin/
 ```
 
 </details>
@@ -63,8 +63,8 @@ brew install env-wizard
 **Prebuilt static binary** (x86_64, no dependencies):
 
 ```sh
-curl -L https://github.com/alphonse-terrier/env-wizard/releases/download/v0.3.1/env-wizard-v0.3.1-x86_64-unknown-linux-musl.tar.gz | tar xz
-sudo mv env-wizard-v0.3.1-x86_64-unknown-linux-musl/env-wizard /usr/local/bin/
+curl -L https://github.com/alphonse-terrier/env-wizard/releases/download/v0.4.0/env-wizard-v0.4.0-x86_64-unknown-linux-musl.tar.gz | tar xz
+sudo mv env-wizard-v0.4.0-x86_64-unknown-linux-musl/env-wizard /usr/local/bin/
 ```
 
 ### 🪟 Windows

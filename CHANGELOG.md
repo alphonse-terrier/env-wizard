@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-21
+
 ### Added
 - Support structured config **templates** as an alternative to `.env.example`:
   `config.example.toml`, `settings.sample.yaml`, `appsettings.example.json` (or a
@@ -89,7 +91,8 @@ All notable changes to this project are documented here. The format is based on
 - Markdown-to-terminal rendering of AI answers.
 - Prebuilt binaries for macOS (arm64/x86_64) and Linux (x86_64 musl); Homebrew tap.
 
-[Unreleased]: https://github.com/alphonse-terrier/env-wizard/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/alphonse-terrier/env-wizard/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/alphonse-terrier/env-wizard/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/alphonse-terrier/env-wizard/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/alphonse-terrier/env-wizard/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/alphonse-terrier/env-wizard/compare/v0.1.0...v0.2.0
