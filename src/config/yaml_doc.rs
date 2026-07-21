@@ -462,7 +462,11 @@ fn line_byte_span(content: &str, line0: usize) -> Option<(usize, usize)> {
 fn leading_comment(content: &str, line0: usize) -> String {
     let lines: Vec<&str> = content.lines().collect();
     let mut collected = Vec::new();
-    let mut i = line0;
+    // Clamp: `line0` is expected to be a valid line index, but guard against it
+    // being out of range (e.g. a line/marker-count mismatch) so this indexes
+    // safely below rather than panicking, matching the safe `.nth(...)` lookup
+    // its sibling in `fields()` already uses.
+    let mut i = line0.min(lines.len());
     while i > 0 {
         i -= 1;
         let trimmed = lines[i].trim();

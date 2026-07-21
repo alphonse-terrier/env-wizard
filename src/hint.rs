@@ -135,14 +135,22 @@ fn matches_whole_word(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() {
         return false;
     }
-    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
-    let bytes = haystack.as_bytes();
+    // Unicode-aware: a multi-byte character right before/after the match must
+    // count as a word character too, not just its raw UTF-8 continuation byte
+    // (which would wrongly look like "not an identifier" if cast to `char`).
+    let is_ident = |c: char| c.is_alphanumeric() || c == '_';
     let mut from = 0;
     while let Some(rel) = haystack[from..].find(needle) {
         let start = from + rel;
         let end = start + needle.len();
-        let before_ok = start == 0 || !is_ident(bytes[start - 1] as char);
-        let after_ok = end >= bytes.len() || !is_ident(bytes[end] as char);
+        let before_ok = haystack[..start]
+            .chars()
+            .last()
+            .map_or(true, |c| !is_ident(c));
+        let after_ok = haystack[end..]
+            .chars()
+            .next()
+            .map_or(true, |c| !is_ident(c));
         if before_ok && after_ok {
             return true;
         }
@@ -259,6 +267,18 @@ mod tests {
         assert!(matches_whole_word("os.environ['PORT']", "PORT"));
         assert!(!matches_whole_word("export SUPPORT_LEVEL=1", "PORT"));
         assert!(!matches_whole_word("IMPORTANT", "PORT"));
+    }
+
+    #[test]
+    fn whole_word_matching_respects_unicode_boundaries() {
+        // 'é' is a 2-byte UTF-8 char; the byte right before 'P' is its second
+        // (continuation) byte. A naive byte-as-char boundary check treats that
+        // continuation byte as "not an identifier char" and wrongly allows the
+        // match. The real preceding character is a letter, so this must not
+        // count as a clean whole-word match.
+        assert!(!matches_whole_word("caféPORT=1", "PORT"));
+        // But a genuine boundary (whitespace) right after a multi-byte char is fine.
+        assert!(matches_whole_word("café PORT=1", "PORT"));
     }
 
     #[test]

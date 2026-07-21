@@ -37,11 +37,42 @@ fn patterns() -> &'static [Regex] {
             // PHP
             r#"getenv\(\s*["']([^"']+)["']"#,
             r#"\$_ENV\[\s*["']([^"']+)["']\s*\]"#,
+            // C#
+            r#"Environment\.GetEnvironmentVariable\(\s*["']([^"']+)["']"#,
+            // Java / Kotlin
+            r#"System\.getenv\(\s*["']([^"']+)["']"#,
         ]
         .iter()
         .map(|p| Regex::new(p).expect("valid scan regex"))
         .collect()
     })
+}
+
+/// Truncates `line` at the start of a `//` or `#` comment marker that appears
+/// outside a quoted string, so a commented-out access idiom (`// process.env.OLD`,
+/// `# os.getenv("OLD")`) isn't reported as real usage. Best-effort heuristic —
+/// quote state resets at the start of each line and escape sequences inside
+/// strings aren't modeled — but it's enough to avoid the common case, and a URL
+/// like `"http://example.com"` is correctly left alone since its `//` sits
+/// inside a string.
+fn strip_comment(line: &str) -> &str {
+    let bytes = line.as_bytes();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' if !in_double => in_single = !in_single,
+            b'"' if !in_single => in_double = !in_double,
+            b'#' if !in_single && !in_double => return &line[..i],
+            b'/' if !in_single && !in_double && bytes.get(i + 1) == Some(&b'/') => {
+                return &line[..i];
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    line
 }
 
 /// A syntactically valid environment variable name.
@@ -69,6 +100,7 @@ pub fn scan_env_vars(repo_root: &Path) -> BTreeMap<String, String> {
             .display()
             .to_string();
         for (i, line) in content.lines().enumerate() {
+            let line = strip_comment(line);
             for re in regexes {
                 for caps in re.captures_iter(line) {
                     if let Some(m) = caps.get(1) {
@@ -105,7 +137,11 @@ mod tests {
     use super::*;
 
     fn scan_dir(files: &[(&str, &str)]) -> BTreeMap<String, String> {
-        let dir = std::env::temp_dir().join(format!("env-wizard-scan-{}", files.len()));
+        // Unique per call (not just per file count) so concurrently-running
+        // tests never share a temp dir and race on remove_dir_all/create.
+        static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("env-wizard-scan-{id}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for (name, body) in files {
@@ -131,6 +167,8 @@ mod tests {
             ("d.go", "os.Getenv(\"GO_ENV\")"),
             ("e.rb", "ENV['RAILS_ENV']"),
             ("f.php", "getenv('PHP_KEY');"),
+            ("g.cs", "Environment.GetEnvironmentVariable(\"DOTNET_ENV\")"),
+            ("h.java", "System.getenv(\"JAVA_HOME_VAR\")"),
         ]);
         for key in [
             "API_URL",
@@ -142,9 +180,35 @@ mod tests {
             "GO_ENV",
             "RAILS_ENV",
             "PHP_KEY",
+            "DOTNET_ENV",
+            "JAVA_HOME_VAR",
         ] {
             assert!(found.contains_key(key), "missing {key} in {found:?}");
         }
+    }
+
+    #[test]
+    fn skips_commented_out_access() {
+        let found = scan_dir(&[
+            (
+                "a.js",
+                "// const x = process.env.COMMENTED_JS;\nconst y = process.env.REAL_JS;",
+            ),
+            ("b.py", "# os.getenv('COMMENTED_PY')\nos.getenv('REAL_PY')"),
+        ]);
+        assert!(found.contains_key("REAL_JS"), "{found:?}");
+        assert!(found.contains_key("REAL_PY"), "{found:?}");
+        assert!(!found.contains_key("COMMENTED_JS"), "{found:?}");
+        assert!(!found.contains_key("COMMENTED_PY"), "{found:?}");
+    }
+
+    #[test]
+    fn url_double_slash_in_string_is_not_mistaken_for_a_comment() {
+        let found = scan_dir(&[(
+            "a.js",
+            "const base = \"http://example.com\"; const k = process.env.AFTER_URL;",
+        )]);
+        assert!(found.contains_key("AFTER_URL"), "{found:?}");
     }
 
     #[test]

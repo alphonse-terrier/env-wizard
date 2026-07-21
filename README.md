@@ -14,10 +14,10 @@ Config in TOML/YAML/JSON? Same walkthrough, real file written, every comment kep
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white)
 ![AI: cloud or local](https://img.shields.io/badge/AI-cloud%20or%20local-8A2BE2)
-![Code scan: 6 languages](https://img.shields.io/badge/code%20scan-6%20languages-2ea44f)
+![Code scan: 8 languages](https://img.shields.io/badge/code%20scan-8%20languages-2ea44f)
 ![Formats: env · toml · yaml · json](https://img.shields.io/badge/formats-env%20%C2%B7%20toml%20%C2%B7%20yaml%20%C2%B7%20json-2ea44f)
 ![Telemetry: none](https://img.shields.io/badge/telemetry-none-brightgreen)
-![Platform: macOS · Linux · Windows](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)
+![Platform: macOS · Linux · Windows (via Cargo)](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20(via%20Cargo)-lightgrey)
 
 </div>
 
@@ -176,7 +176,7 @@ This signs your session cookies. Generate one with:
 - 🧠 **Repo-aware hints** — the AI is fed your README, common config files, and every
   place the variable appears in the code, so its advice is specific — not generic.
 - 🔎 **Catches drift** — `env-wizard scan` audits your `.env.example` against what's
-  actually used in the code (6 languages), and can even work with **no example at all**.
+  actually used in the code (8 languages), and can even work with **no example at all**.
 - 📄 **Not just `.env`** — TOML, YAML, and JSON config templates get the same guided
   walkthrough, and only the values you change are ever touched.
 - 💾 **Safe, tidy writes** — confirms before overwriting an existing `.env`, keeps a
@@ -208,6 +208,7 @@ Three ways to use it:
 | Command | What it does |
 | ------- | ------------ |
 | `env-wizard scan` | **Audit**, read-only: what's used in code but missing from the example (with `file:line`), and what's declared but unused. |
+| `env-wizard scan --check` | Same audit, but **exits with status 1 if any drift is found** — drop it in CI to catch a `.env.example` that's fallen out of sync. |
 | `env-wizard` *(no `.env.example` present)* | **Fallback**: derives the variable list straight from the code and runs the wizard anyway. |
 | `env-wizard --from-code` | **Augment**: prompts for the example's variables *plus* any extras found in the code. |
 
@@ -225,6 +226,8 @@ Detected patterns:
 | Go       | `os.Getenv("FOO")`, `os.LookupEnv("FOO")` |
 | Ruby     | `ENV["FOO"]`, `ENV.fetch("FOO")` |
 | PHP      | `getenv("FOO")`, `$_ENV["FOO"]` |
+| C#       | `Environment.GetEnvironmentVariable("FOO")` |
+| Java / Kotlin | `System.getenv("FOO")` |
 
 > Heuristic (regex, v1): computed keys like `process.env[someVar]` can't be detected
 > reliably. As everywhere else, real `.env` files are never read — only source code.
@@ -354,7 +357,8 @@ env-wizard
 | ------------------- | ---------------------------------------- |
 | `env-wizard`        | Run the interactive `.env` filler        |
 | `env-wizard config` | Choose or change the AI provider         |
-| `env-wizard scan`   | Audit code usage vs `.env.example`       |
+| `env-wizard scan`   | Audit code usage vs `.env.example` (add `--check` to exit 1 on drift, for CI) |
+| `env-wizard completions <shell>` | Print a shell completion script (bash, zsh, fish, elvish, powershell) |
 
 </details>
 
@@ -398,7 +402,7 @@ keys; providers use their own configured credentials.
 No. When building context, env-wizard deliberately **skips real dotenv files**
 (`.env`, `.env.local`, `.env.production`, …) — only template files like `.env.example`
 are ever read. So values already in your `.env` are never included in a prompt.
-(See `is_secret_env_file` in `src/hint.rs`.)
+(See `is_secret_env_file` in `src/repo.rs`.)
 
 **I don't have an AI CLI installed — is env-wizard still useful?**
 Yes. The whole guided flow (inline comment hints, defaults, safe writing) works

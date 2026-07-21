@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- After a normal (non-`--from-code`, non-`--yes`) run finishes writing `.env`,
+  env-wizard now offers to also add any variables it can see are used in the
+  code but weren't just written, prompting for their values the same guided
+  way and appending them to the file. Closes the common drift gap without
+  requiring `--from-code` or a separate `env-wizard scan`.
+- `env-wizard scan --check` exits with status 1 if any drift is found (missing
+  or unused variables), so `scan` can gate CI instead of being report-only.
+- Code scanning now also detects C# (`Environment.GetEnvironmentVariable`) and
+  Java/Kotlin (`System.getenv`), bringing the total to 8 languages.
+- Three more AI provider presets in `env-wizard config`'s picker: LM Studio,
+  OpenRouter, and Groq — previously these required hand-typing the base URL,
+  model, and API key env var via "Other OpenAI-compatible API…".
+- `env-wizard completions <shell>` generates a shell completion script (bash,
+  zsh, fish, elvish, powershell).
+
+### Fixed
+- A failure to restrict a freshly written `.env`'s permissions to `0600` on
+  Unix used to fail silently; it now prints a visible warning instead, since
+  the file holds secrets.
+- HTTP provider errors (bad API key, rate limits, etc.) used to be misreported
+  as "endpoint unreachable or timed out" even when the provider responded —
+  the actual status code and response body are now surfaced.
+- Code scanning no longer flags commented-out access idioms (`// process.env.OLD`,
+  `# os.getenv("OLD")`) as real usage.
+
 ## [0.4.0] - 2026-07-21
 
 ### Added

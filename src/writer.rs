@@ -94,7 +94,7 @@ pub fn write_file(
         std::fs::copy(output_path, &backup)
             .with_context(|| format!("failed to back up existing file to {}", backup.display()))?;
         if restrict {
-            restrict_permissions(&backup);
+            warn_on_restrict_failure(&backup, restrict_permissions(&backup));
         }
         println!("{} {}", style("↳ backup:").dim(), backup.display());
     }
@@ -102,21 +102,39 @@ pub fn write_file(
     std::fs::write(output_path, content)
         .with_context(|| format!("failed to write {}", output_path.display()))?;
     if restrict {
-        restrict_permissions(output_path);
+        warn_on_restrict_failure(output_path, restrict_permissions(output_path));
     }
 
     Ok(WriteOutcome::Written)
 }
 
+/// Prints a non-fatal warning if restricting a secrets file's permissions
+/// failed. The file itself was already written successfully — this only
+/// surfaces a security-relevant gap that used to be silently swallowed.
+fn warn_on_restrict_failure(path: &Path, result: std::io::Result<()>) {
+    if let Err(e) = result {
+        println!(
+            "{}",
+            style(format!(
+                "⚠ could not restrict permissions on {}: {e} — the file may be readable by other users",
+                path.display()
+            ))
+            .yellow()
+        );
+    }
+}
+
 /// On Unix, restrict a secrets file to owner read/write (`0600`). No-op elsewhere.
 #[cfg(unix)]
-fn restrict_permissions(path: &Path) {
+fn restrict_permissions(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
 }
 
 #[cfg(not(unix))]
-fn restrict_permissions(_path: &Path) {}
+fn restrict_permissions(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
 
 /// Builds the `<output>.bak` sibling path.
 fn backup_path(output_path: &Path) -> std::path::PathBuf {

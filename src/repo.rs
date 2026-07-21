@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 /// Skip files larger than this (avoids loading huge generated files).
-pub(crate) const MAX_FILE_BYTES: u64 = 256 * 1024;
+pub const MAX_FILE_BYTES: u64 = 256 * 1024;
 
 /// Walks `repo_root`, yielding `(path, contents)` for every readable text file
 /// that passes the skip filters: excluded dirs, secret dotenv files, lockfiles,

@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use console::style;
 use dialoguer::{theme::ColorfulTheme, Confirm};
 
@@ -18,6 +18,7 @@ use env_wizard::config::{self, ConfigDoc, Field};
 use env_wizard::parser::{self, EnvVar};
 use env_wizard::prompt::{self, Options, Outcome};
 use env_wizard::provider;
+use env_wizard::repo;
 use env_wizard::scan;
 use env_wizard::writer::{self, WriteOutcome};
 
@@ -71,7 +72,18 @@ enum Commands {
     /// Choose or change the AI provider used for hints.
     Config,
     /// Audit: compare variables used in code against the `.env.example`.
-    Scan,
+    Scan {
+        /// Exit with status 1 if drift is found (missing or unused
+        /// variables). Useful as a CI check; the default (no flag) always
+        /// exits 0, matching the plain "read-only audit" behavior.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Generate a shell completion script (bash, zsh, fish, elvish, powershell).
+    Completions {
+        /// Shell to generate completions for.
+        shell: clap_complete::Shell,
+    },
 }
 
 /// Which shape the resolved input file has, and how to read/write it.
@@ -103,7 +115,16 @@ fn main() -> Result<()> {
             provider::configure_interactive()?;
             return Ok(());
         }
-        Some(Commands::Scan) => return run_scan(&resolved),
+        Some(Commands::Scan { check }) => return run_scan(&resolved, check),
+        Some(Commands::Completions { shell }) => {
+            clap_complete::generate(
+                shell,
+                &mut Cli::command(),
+                "env-wizard",
+                &mut std::io::stdout(),
+            );
+            return Ok(());
+        }
         None => {}
     }
 
@@ -289,6 +310,25 @@ fn resolve_input_from(base: &Path, explicit: Option<&Path>) -> ResolvedInput {
     }
 }
 
+/// Reads `path` to a string, refusing files larger than [`repo::MAX_FILE_BYTES`]
+/// — the same cap `repo::text_files` applies during code scanning — so format
+/// auto-detection and example/template parsing can't be made to slurp an
+/// unexpectedly huge file into memory.
+fn read_capped(path: &Path) -> std::io::Result<String> {
+    let len = std::fs::metadata(path)?.len();
+    if len > repo::MAX_FILE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "{} is {len} bytes, over the {}-byte limit env-wizard reads for example/template files",
+                path.display(),
+                repo::MAX_FILE_BYTES
+            ),
+        ));
+    }
+    std::fs::read_to_string(path)
+}
+
 /// Detects the [`InputFormat`] of an explicit `--input` path.
 ///
 /// A dotenv-shaped filename (see [`is_dotenv_name`]) is always [`InputFormat::Dotenv`]
@@ -310,7 +350,7 @@ fn detect_explicit_format(base: &Path, path: &Path) -> InputFormat {
             .and_then(config::format_from_extension)
     };
 
-    match std::fs::read_to_string(base.join(path)) {
+    match read_capped(&base.join(path)) {
         Ok(content) => config::detect_format_from_content(&content)
             .or_else(extension_format)
             .map(InputFormat::Config)
@@ -367,7 +407,7 @@ fn find_config_template(base: &Path) -> FoundTemplates {
         if !path.is_file() || is_dotenv_name(&path) || !config::has_template_marker(&path) {
             continue;
         }
-        let Ok(content) = std::fs::read_to_string(&path) else {
+        let Ok(content) = read_capped(&path) else {
             continue;
         };
         if let Some(format) = config::resolve_template_format(&path, &content) {
@@ -420,8 +460,8 @@ fn collect_vars(cli: &Cli, resolved: &ResolvedInput, repo_root: &Path) -> Result
 
 /// Reads and parses a structured config template.
 fn collect_config_vars(input: &Path, format: config::Format) -> Result<Source> {
-    let content = std::fs::read_to_string(input)
-        .with_context(|| format!("could not read {}", input.display()))?;
+    let content =
+        read_capped(input).with_context(|| format!("could not read {}", input.display()))?;
     let doc = config::open(format, &content)?;
     let fields = doc.fields();
     Ok(Source::Config(doc, fields))
@@ -430,7 +470,7 @@ fn collect_config_vars(input: &Path, format: config::Format) -> Result<Source> {
 /// Builds the list of variables to prompt for, applying the example file, the
 /// `--from-code` augmentation, and the no-example fallback.
 fn collect_dotenv_vars(cli: &Cli, input: &Path, repo_root: &Path) -> Result<Vec<EnvVar>> {
-    let example = match std::fs::read_to_string(input) {
+    let example = match read_capped(input) {
         Ok(content) => Some(parser::parse(&content)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(e).with_context(|| format!("could not read {}", input.display())),
@@ -558,7 +598,11 @@ fn offer_missing_code_vars(
 }
 
 /// `env-wizard scan`: read-only audit of code usage vs the example file.
-fn run_scan(resolved: &ResolvedInput) -> Result<()> {
+///
+/// With `check`, exits with status 1 if any drift is found (missing or
+/// unused variables), so `scan --check` can gate CI. Without it (the
+/// default), always exits 0 — it's just a report.
+fn run_scan(resolved: &ResolvedInput, check: bool) -> Result<()> {
     if matches!(resolved.format, InputFormat::Config(_)) {
         println!(
             "{}",
@@ -571,7 +615,7 @@ fn run_scan(resolved: &ResolvedInput) -> Result<()> {
     let repo_root = repo_root_of(input);
     let used = scan::scan_env_vars(&repo_root);
 
-    let declared: Vec<String> = match std::fs::read_to_string(input) {
+    let declared: Vec<String> = match read_capped(input) {
         Ok(content) => parser::parse(&content).into_iter().map(|v| v.key).collect(),
         Err(_) => Vec::new(),
     };
@@ -597,6 +641,9 @@ fn run_scan(resolved: &ResolvedInput) -> Result<()> {
                 style(format!("• {name}")).cyan(),
                 style(loc).dim()
             );
+        }
+        if check && !used.is_empty() {
+            std::process::exit(1);
         }
         return Ok(());
     }
@@ -655,6 +702,8 @@ fn run_scan(resolved: &ResolvedInput) -> Result<()> {
                 .green()
                 .bold()
         );
+    } else if check {
+        std::process::exit(1);
     }
 
     Ok(())
@@ -820,7 +869,11 @@ mod tests {
     #[test]
     fn explicit_input_detects_format_for_extensionless_template() {
         let dir = TempDir::new("explicit-extensionless");
-        std::fs::write(dir.0.join("config.example"), "host: localhost\nport: 5432\n").unwrap();
+        std::fs::write(
+            dir.0.join("config.example"),
+            "host: localhost\nport: 5432\n",
+        )
+        .unwrap();
 
         let resolved = resolve_input_from(&dir.0, Some(Path::new("config.example")));
         assert!(matches!(
@@ -834,7 +887,11 @@ mod tests {
         let dir = TempDir::new("explicit-dotenv-guard");
         // Quoted values here also happen to parse as valid TOML, but a
         // dotenv-shaped filename must never be reclassified.
-        std::fs::write(dir.0.join(".env.example"), "HOST=\"localhost\"\nPORT=\"5432\"\n").unwrap();
+        std::fs::write(
+            dir.0.join(".env.example"),
+            "HOST=\"localhost\"\nPORT=\"5432\"\n",
+        )
+        .unwrap();
 
         let resolved = resolve_input_from(&dir.0, Some(Path::new(".env.example")));
         assert!(matches!(resolved.format, InputFormat::Dotenv));
@@ -931,5 +988,47 @@ mod tests {
 
         let written = std::fs::read_to_string(&out_path).unwrap();
         assert_eq!(written, example);
+    }
+
+    #[test]
+    fn end_to_end_yes_run_on_dotenv_writes_expected_content() {
+        let dir = TempDir::new("end-to-end-dotenv");
+        let example =
+            "# Port to listen on\nPORT=3000\n\n# Secret used to sign cookies\nSECRET_KEY=\n";
+        std::fs::write(dir.0.join(".env.example"), example).unwrap();
+
+        let resolved = resolve_input_from(&dir.0, None);
+        assert_eq!(resolved.path, PathBuf::from(".env.example"));
+        assert!(matches!(resolved.format, InputFormat::Dotenv));
+
+        let cli = Cli {
+            command: None,
+            input: None,
+            output: None,
+            yes: true,
+            no_ai: true,
+            from_code: false,
+        };
+        let input_path = dir.0.join(&resolved.path);
+        let prompt_vars = collect_dotenv_vars(&cli, &input_path, &dir.0).unwrap();
+        assert_eq!(prompt_vars.len(), 2);
+
+        let opts = Options {
+            no_ai: cli.no_ai,
+            accept_defaults: cli.yes,
+        };
+        let answers = match prompt::run(&dir.0, &prompt_vars, &opts).unwrap() {
+            Outcome::Completed(a) => a,
+            Outcome::Quit => panic!("--yes-equivalent run should never quit"),
+        };
+
+        let out_path = dir.0.join(default_output_for(&resolved));
+        writer::write_env(&out_path, &answers, true).unwrap();
+
+        let written = std::fs::read_to_string(&out_path).unwrap();
+        assert_eq!(
+            written,
+            "# Port to listen on\nPORT=3000\n\n# Secret used to sign cookies\nSECRET_KEY=\n"
+        );
     }
 }

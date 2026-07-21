@@ -80,8 +80,17 @@ fn split_bullet(line: &str) -> Option<(String, &str)> {
     None
 }
 
+/// Caps recursion in [`render_inline_depth`] for nested `**bold**` spans. An AI
+/// response's shape/length isn't bounded, so without a cap a pathological
+/// (deeply or repeatedly nested) response could overflow the stack.
+const MAX_INLINE_DEPTH: usize = 32;
+
 /// Renders inline spans: `` `code` ``, `**bold**`/`__bold__`, `*italic*`/`_italic_`.
 fn render_inline(s: &str) -> String {
+    render_inline_depth(s, 0)
+}
+
+fn render_inline_depth(s: &str, depth: usize) -> String {
     let chars: Vec<char> = s.chars().collect();
     let mut result = String::new();
     let mut i = 0;
@@ -103,7 +112,12 @@ fn render_inline(s: &str) -> String {
         if (c == '*' || c == '_') && i + 1 < chars.len() && chars[i + 1] == c {
             if let Some(end) = find_double(&chars, i + 2, c) {
                 let inner: String = chars[i + 2..end].iter().collect();
-                result.push_str(&style(render_inline(&inner)).bold().to_string());
+                let rendered = if depth < MAX_INLINE_DEPTH {
+                    render_inline_depth(&inner, depth + 1)
+                } else {
+                    inner
+                };
+                result.push_str(&style(rendered).bold().to_string());
                 i = end + 2;
                 continue;
             }
@@ -157,6 +171,24 @@ mod tests {
     #[test]
     fn heading_marker_removed() {
         assert_eq!(plain("## Setup"), "Setup");
+    }
+
+    #[test]
+    fn deeply_nested_bold_does_not_overflow_the_stack() {
+        // Alternate `**`/`__` markers per level so `find_double` (which only
+        // matches the exact marker char that opened a span) can't prematurely
+        // close an outer span on an inner level's markers — this constructs
+        // genuinely nested spans, not adjacent same-char runs that collapse
+        // into empty pairs.
+        let mut input = "core".to_string();
+        for i in 0..200 {
+            let marker = if i % 2 == 0 { "**" } else { "__" };
+            input = format!("{marker}{input}{marker}");
+        }
+        // Just needs to return without panicking/overflowing the stack; exact
+        // styling beyond the recursion cap isn't the point of this test.
+        let out = plain(&input);
+        assert!(out.contains("core"));
     }
 
     #[test]

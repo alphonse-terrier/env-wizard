@@ -127,6 +127,9 @@ pub fn configure_interactive() -> Result<Config> {
         "Ollama — local (CLI)",
         "OpenAI (API)",
         "Ollama — local (API)",
+        "LM Studio — local (API)",
+        "OpenRouter (API)",
+        "Groq (API)",
         "Other CLI command…",
         "Other OpenAI-compatible API…",
     ];
@@ -187,6 +190,45 @@ pub fn configure_interactive() -> Result<Config> {
             }
         }
         4 => {
+            let model = ask_default(&theme, "LM Studio model", "local-model")?;
+            Config {
+                kind: "openai".into(),
+                label: format!("LM Studio/{model} (API)"),
+                command: None,
+                openai: Some(OpenaiProvider {
+                    base_url: "http://localhost:1234/v1".into(),
+                    model,
+                    api_key_env: String::new(),
+                }),
+            }
+        }
+        5 => {
+            let model = ask_default(&theme, "OpenRouter model", "anthropic/claude-3.5-sonnet")?;
+            Config {
+                kind: "openai".into(),
+                label: format!("OpenRouter/{model} (API)"),
+                command: None,
+                openai: Some(OpenaiProvider {
+                    base_url: "https://openrouter.ai/api/v1".into(),
+                    model,
+                    api_key_env: "OPENROUTER_API_KEY".into(),
+                }),
+            }
+        }
+        6 => {
+            let model = ask_default(&theme, "Groq model", "llama-3.3-70b-versatile")?;
+            Config {
+                kind: "openai".into(),
+                label: format!("Groq/{model} (API)"),
+                command: None,
+                openai: Some(OpenaiProvider {
+                    base_url: "https://api.groq.com/openai/v1".into(),
+                    model,
+                    api_key_env: "GROQ_API_KEY".into(),
+                }),
+            }
+        }
+        7 => {
             let program: String = Input::with_theme(&theme)
                 .with_prompt("Program (e.g. gemini, llm)")
                 .interact_text()?;
@@ -364,9 +406,23 @@ fn run_http(o: &OpenaiProvider, prompt: &str) -> Result<String> {
         req = req.set("Authorization", &format!("Bearer {key}"));
     }
 
-    let resp = req
-        .send_json(body)
-        .with_context(|| format!("request to {url} failed (endpoint unreachable or timed out?)"))?;
+    let resp = match req.send_json(body) {
+        Ok(resp) => resp,
+        Err(ureq::Error::Status(code, response)) => {
+            // The provider is reachable and answered — the failure is in the
+            // response itself (bad/missing API key, rate limit, bad model
+            // name, …). Surface the status and body instead of the generic
+            // "unreachable or timed out" message, which would be misleading.
+            let body = response.into_string().unwrap_or_default();
+            let snippet: String = body.chars().take(300).collect();
+            anyhow::bail!("provider returned HTTP {code} for {url}: {snippet}");
+        }
+        Err(ureq::Error::Transport(e)) => {
+            return Err(anyhow::Error::new(e)).with_context(|| {
+                format!("request to {url} failed (endpoint unreachable or timed out?)")
+            });
+        }
+    };
     let json: serde_json::Value = resp.into_json().context("invalid JSON from provider")?;
 
     let content = json["choices"][0]["message"]["content"]
@@ -413,5 +469,161 @@ mod tests {
         std::env::set_var("ENV_WIZARD_CONFIG", "/tmp/ew-explicit.toml");
         assert_eq!(config_path(), PathBuf::from("/tmp/ew-explicit.toml"));
         std::env::remove_var("ENV_WIZARD_CONFIG");
+    }
+
+    // --- run_command --------------------------------------------------------
+    // Exercised with real, near-universal coreutils rather than mocks, since
+    // it's just spawning a process — no network involved. Unix-only, matching
+    // the existing platform-conditional test pattern in src/writer.rs.
+
+    #[cfg(unix)]
+    fn command(program: &str, args: &[&str], prompt_via: &str) -> CommandProvider {
+        CommandProvider {
+            program: program.into(),
+            args: args.iter().map(|s| s.to_string()).collect(),
+            prompt_via: prompt_via.into(),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_arg_mode_passes_prompt_as_last_argument() {
+        let out = run_command(&command("echo", &[], "arg"), "hello arg mode").unwrap();
+        assert_eq!(out, "hello arg mode");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_stdin_mode_pipes_prompt() {
+        let out = run_command(&command("cat", &[], "stdin"), "hello stdin mode").unwrap();
+        assert_eq!(out, "hello stdin mode");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_surfaces_nonzero_exit() {
+        let err = run_command(&command("false", &[], "arg"), "hi")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("`false` failed"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_rejects_empty_output() {
+        let err = run_command(&command("true", &[], "arg"), "hi")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("returned no content"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_reports_launch_failure() {
+        let err = run_command(
+            &command("definitely-not-a-real-binary-xyz", &[], "arg"),
+            "hi",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("failed to launch"), "{err}");
+    }
+
+    // --- run_http ------------------------------------------------------------
+    // A tiny hand-rolled TCP mock: real HTTP over loopback, no dependency on a
+    // mocking crate, and no network access outside the machine.
+
+    fn spawn_http_mock(response: &'static str) -> String {
+        use std::io::Read;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+
+                // Read the full request — headers, then exactly as much body as
+                // its own Content-Length declares — before responding. Draining
+                // it fully avoids leaving unread bytes in the socket buffer,
+                // which can turn a plain close into a TCP reset raced against
+                // our response under load (the source of this mock's original
+                // flakiness).
+                let mut received = Vec::new();
+                let mut buf = [0u8; 4096];
+                let header_end = loop {
+                    if let Some(pos) = received.windows(4).position(|w| w == b"\r\n\r\n") {
+                        break Some(pos + 4);
+                    }
+                    if received.len() > 64 * 1024 {
+                        break None;
+                    }
+                    match stream.read(&mut buf) {
+                        Ok(0) => break None,
+                        Ok(n) => received.extend_from_slice(&buf[..n]),
+                        Err(_) => break None,
+                    }
+                };
+
+                if let Some(header_end) = header_end {
+                    let header_text = String::from_utf8_lossy(&received[..header_end]);
+                    let content_length: usize = header_text
+                        .lines()
+                        .find_map(|l| {
+                            l.strip_prefix("Content-Length:")
+                                .or(l.strip_prefix("content-length:"))
+                        })
+                        .and_then(|v| v.trim().parse().ok())
+                        .unwrap_or(0);
+                    let body_so_far = received.len() - header_end;
+                    let mut remaining = content_length.saturating_sub(body_so_far);
+                    while remaining > 0 {
+                        let n = std::cmp::min(remaining, buf.len());
+                        match stream.read(&mut buf[..n]) {
+                            Ok(0) | Err(_) => break,
+                            Ok(read) => remaining -= read,
+                        }
+                    }
+                }
+
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+                let _ = stream.shutdown(std::net::Shutdown::Both);
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    fn openai(base_url: String) -> OpenaiProvider {
+        OpenaiProvider {
+            base_url,
+            model: "test-model".into(),
+            api_key_env: String::new(),
+        }
+    }
+
+    #[test]
+    fn run_http_returns_message_content_on_success() {
+        let body = r#"{"choices":[{"message":{"content":"hello from mock"}}]}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        let url = spawn_http_mock(Box::leak(response.into_boxed_str()));
+        let out = run_http(&openai(url), "hi").unwrap();
+        assert_eq!(out, "hello from mock");
+    }
+
+    #[test]
+    fn run_http_surfaces_status_code_and_body_on_error() {
+        let body = r#"{"error":"invalid api key"}"#;
+        let response = format!(
+            "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        let url = spawn_http_mock(Box::leak(response.into_boxed_str()));
+        let err = run_http(&openai(url), "hi").unwrap_err().to_string();
+        assert!(err.contains("401"), "{err}");
+        assert!(err.contains("invalid api key"), "{err}");
+        // Must NOT be misreported as a connectivity issue — that's the bug fixed.
+        assert!(!err.contains("unreachable or timed out"), "{err}");
     }
 }
