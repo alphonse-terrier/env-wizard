@@ -8,8 +8,9 @@
 as you go, and **your** AI (cloud *or* local) on standby for anything unclear. Then it
 writes `.env` for you, safely.
 
-No example file? It **scans your code** (JS/TS, Python, Rust, Go, Ruby, PHP) instead.
 Config in TOML/YAML/JSON? Same walkthrough, real file written, every comment kept.
+
+No example file? It **scans your code** (JS/TS, Python, Rust, Go, Ruby, PHP) instead.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white)
@@ -25,8 +26,8 @@ Config in TOML/YAML/JSON? Same walkthrough, real file written, every comment kep
 
 ## ⚡ Install
 
-Pick the method for your OS — then run `env-wizard` inside any repo that has a
-`.env.example`.
+Hand it to a coding agent, or pick the method for your OS — then run
+`env-wizard` inside any repo that has a `.env.example`.
 
 ### 🤖 Installing via a coding agent
 
@@ -114,6 +115,11 @@ env-wizard
 ```
 
 That's it. 🎉
+
+The first time you press `?` for a hint, env-wizard asks which AI to use — pick
+one from a short list (Claude, OpenAI, local Ollama, LM Studio, OpenRouter, Groq,
+or your own) and it's remembered from then on. No config file to write by hand,
+no API to wire up. See [Choose your AI](#-choose-your-ai).
 
 ---
 
