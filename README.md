@@ -8,9 +8,13 @@
 at a time — showing the inline docs as you go, and asking **your** AI (cloud *or*
 local) for a repo-aware hint the moment you're stuck. Then it writes your `.env`.
 
+No `.env.example`, or an outdated one? env-wizard **scans your source code**
+(JS/TS, Python, Rust, Go, Ruby, PHP) to find the variables you actually use.
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white)
 ![AI: cloud or local](https://img.shields.io/badge/AI-cloud%20or%20local-8A2BE2)
+![Code scan: 6 languages](https://img.shields.io/badge/code%20scan-6%20languages-2ea44f)
 ![Telemetry: none](https://img.shields.io/badge/telemetry-none-brightgreen)
 ![Platform: macOS · Linux · Windows](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)
 
@@ -99,7 +103,7 @@ That's it. 🎉
 
 ---
 
-**Jump to:** [Problem](#-the-problem) · [Demo](#-demo) · [Features](#-why-youll-like-it) · [Choose your AI](#-choose-your-ai) · [Scan code](#-discover-variables-from-your-code) · [Usage](#-usage-reference) · [How it works](#-how-it-works) · [FAQ](#-faq)
+**Jump to:** [Problem](#-the-problem) · [Demo](#-demo) · [Scan your code](#-scan-your-code-for-env-vars) · [Features](#-why-youll-like-it) · [Choose your AI](#-choose-your-ai) · [Usage](#-usage-reference) · [How it works](#-how-it-works) · [FAQ](#-faq)
 
 ## 🤔 The problem
 
@@ -149,6 +153,45 @@ This signs your session cookies. Generate one with:
 > Type your question after the `?` (e.g. `? what format is expected?`) and the AI
 > answers it directly.
 
+## 🔎 Scan your code for env vars
+
+`.env.example` files drift: someone adds `process.env.STRIPE_SECRET_KEY` to the code and
+forgets the example. env-wizard reads the **source itself** — JS/TS, Python, Rust, Go,
+Ruby, PHP — to catch that before it costs you twenty minutes of debugging.
+
+```console
+$ env-wizard scan
+Used in code but missing from .env.example (2):
+  • REDIS_URL src/cache.py:1
+  • STRIPE_SECRET_KEY src/server.js:2
+
+Declared in .env.example but not found in code (1):
+  • OLD_FEATURE_FLAG
+```
+
+Three ways to use it:
+
+| Command | What it does |
+| ------- | ------------ |
+| `env-wizard scan` | **Audit**, read-only: what's used in code but missing from the example (with `file:line`), and what's declared but unused. |
+| `env-wizard` *(no `.env.example` present)* | **Fallback**: derives the variable list straight from the code and runs the wizard anyway. |
+| `env-wizard --from-code` | **Augment**: prompts for the example's variables *plus* any extras found in the code. |
+
+Detected patterns:
+
+| Language | Detected |
+| -------- | -------- |
+| JS / TS  | `process.env.FOO`, `process.env["FOO"]`, `import.meta.env.FOO` |
+| Python   | `os.environ["FOO"]`, `os.environ.get("FOO")`, `os.getenv("FOO")` |
+| Rust     | `env::var("FOO")`, `env!("FOO")`, `option_env!("FOO")` |
+| Go       | `os.Getenv("FOO")`, `os.LookupEnv("FOO")` |
+| Ruby     | `ENV["FOO"]`, `ENV.fetch("FOO")` |
+| PHP      | `getenv("FOO")`, `$_ENV["FOO"]` |
+
+> Heuristic (regex, v1): computed keys like `process.env[someVar]` can't be detected
+> reliably. As everywhere else, real `.env` files are never read — only source code.
+> (`src/scan.rs`)
+
 ## 💛 Why you'll like it
 
 - 🧭 **Guided, not guesswork** — every variable's `.env.example` comment shows inline
@@ -161,6 +204,8 @@ This signs your session cookies. Generate one with:
   whole prompt stays on your machine — nothing leaves at all.
 - 🧠 **Repo-aware hints** — the AI is fed your README, common config files, and every
   place the variable appears in the code, so its advice is specific — not generic.
+- 🔎 **Catches drift** — `env-wizard scan` audits your `.env.example` against what's
+  actually used in the code (6 languages), and can even work with **no example at all**.
 - 💾 **Safe, tidy writes** — confirms before overwriting an existing `.env`, keeps a
   `.env.bak`, carries your `.env.example` comments over each variable, and writes the
   file `0600` (owner-only) on Unix.
@@ -203,32 +248,6 @@ prompt_via = "arg"         # "arg" (append prompt) | "stdin" (pipe prompt)
 # model       = "gpt-4o-mini"
 # api_key_env = "OPENAI_API_KEY"   # empty = no auth (e.g. local Ollama)
 ```
-
-## 🔎 Discover variables from your code
-
-`.env.example` files drift — a variable gets used in the code but nobody adds it to the
-example. env-wizard can read the **source** too, detecting the usual access patterns:
-
-| Language | Detected |
-| -------- | -------- |
-| JS / TS  | `process.env.FOO`, `process.env["FOO"]`, `import.meta.env.FOO` |
-| Python   | `os.environ["FOO"]`, `os.environ.get("FOO")`, `os.getenv("FOO")` |
-| Rust     | `env::var("FOO")`, `env!("FOO")`, `option_env!("FOO")` |
-| Go       | `os.Getenv("FOO")`, `os.LookupEnv("FOO")` |
-| Ruby     | `ENV["FOO"]`, `ENV.fetch("FOO")` |
-| PHP      | `getenv("FOO")`, `$_ENV["FOO"]` |
-
-Three ways it helps:
-
-- **Audit** — `env-wizard scan` prints variables used in code but missing from
-  `.env.example` (with `file:line`), and ones declared but never used. Read-only.
-- **Fallback** — no `.env.example`? env-wizard derives the list from the code and runs
-  the wizard anyway.
-- **Augment** — `env-wizard --from-code` prompts for the example's variables **plus** any
-  extra ones found in the code.
-
-> Heuristic (regex, v1): computed keys like `process.env[someVar]` can't be detected
-> reliably. As everywhere else, real `.env` files are never read. (`src/scan.rs`)
 
 ## 📖 Usage reference
 
