@@ -31,6 +31,12 @@ env-wizard reads the template and writes the real file, preserving every comment
 Pick the method for your OS — then run `env-wizard` inside any repo that has a
 `.env.example`.
 
+### 🤖 Installing via a coding agent
+
+Working with Claude Code, Codex, or another coding agent? Just hand it this prompt:
+
+> Install env-wizard from https://github.com/alphonse-terrier/env-wizard
+
 ### 🍎 macOS
 
 **Homebrew** (recommended):
