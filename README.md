@@ -4,9 +4,12 @@
 
 ### Never guess what goes in a `.env` again.
 
-**env-wizard** walks you through a freshly cloned repo's `.env.example` one variable
-at a time — showing the inline docs as you go, and asking **your** AI (cloud *or*
-local) for a repo-aware hint the moment you're stuck. Then it writes your `.env`.
+You clone a repo. Its `.env.example` has fifteen variables and terse comments — half
+you can guess, the rest send you spelunking through docs and source just to learn
+what `REDIS_TLS_URL` should look like. **env-wizard** fixes that: it walks you through
+the file one variable at a time, showing the inline docs as you go, and asking
+**your** AI (cloud *or* local) for a repo-aware hint the moment you're stuck. Then it
+writes your `.env` for you, safely.
 
 No `.env.example`, or an outdated one? env-wizard **scans your source code**
 (JS/TS, Python, Rust, Go, Ruby, PHP) to find the variables you actually use.
@@ -118,22 +121,11 @@ That's it. 🎉
 
 ---
 
-**Jump to:** [Problem](#-the-problem) · [Demo](#-demo) · [Scan your code](#-scan-your-code-for-env-vars) · [Features](#-why-youll-like-it) · [Choose your AI](#-choose-your-ai) · [Usage](#-usage-reference) · [How it works](#-how-it-works) · [FAQ](#-faq)
+**Jump to:** [Demo](#-see-it-in-action) · [Features](#-why-youll-like-it) · [Scan your code](#-scan-your-code-for-env-vars) · [Config templates](#-toml--yaml--json-config-templates) · [Choose your AI](#-choose-your-ai) · [Usage](#-usage-reference) · [How it works](#-how-it-works) · [FAQ](#-faq)
 
-## 🤔 The problem
+## 🎬 See it in action
 
-You clone a repo. Its `.env.example` has fifteen variables and terse comments. Half
-you can guess; the rest send you spelunking through the README, `docker-compose.yml`,
-and the source just to learn what `REDIS_TLS_URL` should look like. Twenty minutes
-later, you *still* aren't running.
-
-## ✅ The fix
-
-`env-wizard` reads `.env.example`, asks for each variable in turn, shows its comment
-as a hint, and — when you type `?` — asks an AI that has **already read your repo**
-what to put and how to get it. Then it writes `.env` for you, safely.
-
-## 🎬 Demo
+Here's what a real run looks like:
 
 ```console
 $ env-wizard
@@ -167,6 +159,27 @@ This signs your session cookies. Generate one with:
 > bullets, and commands, with the raw Markdown stripped away. Need something specific?
 > Type your question after the `?` (e.g. `? what format is expected?`) and the AI
 > answers it directly.
+
+## 💛 Why you'll like it
+
+- 🧭 **Guided, not guesswork** — every variable's `.env.example` comment shows inline
+  as a hint, *before* you ever call the AI.
+- 🤖 **Your AI, your rules** — hints come from whatever provider you pick: Claude,
+  OpenAI, a local Ollama model, or any OpenAI-compatible endpoint. Nothing is
+  hardcoded, and env-wizard stores **no** API keys.
+- 🔒 **Private by design** — your `.env` values are **never** sent to any AI, cloud or
+  local. And with a local provider (Ollama, LM Studio at `http://localhost:11434`) the
+  whole prompt stays on your machine — nothing leaves at all.
+- 🧠 **Repo-aware hints** — the AI is fed your README, common config files, and every
+  place the variable appears in the code, so its advice is specific — not generic.
+- 🔎 **Catches drift** — `env-wizard scan` audits your `.env.example` against what's
+  actually used in the code (6 languages), and can even work with **no example at all**.
+- 📄 **Not just `.env`** — TOML, YAML, and JSON config templates get the same guided
+  walkthrough, and only the values you change are ever touched.
+- 💾 **Safe, tidy writes** — confirms before overwriting an existing `.env`, keeps a
+  `.env.bak`, carries your `.env.example` comments over each variable, and writes the
+  file `0600` (owner-only) on Unix.
+- 🪶 **One small binary** — written in Rust. No runtime, no daemon, starts instantly.
 
 ## 🔎 Scan your code for env vars
 
@@ -247,27 +260,6 @@ filenames (`.env`, `.env.example`, …) are never reinterpreted as a structured
 format no matter what their content looks like. You can always be explicit with
 `--input`/`-o`. `--from-code` and `env-wizard scan` are dotenv-only, since a code
 scanner has nothing to say about config keys.
-
-## 💛 Why you'll like it
-
-- 🧭 **Guided, not guesswork** — every variable's `.env.example` comment shows inline
-  as a hint, *before* you ever call the AI.
-- 🤖 **Your AI, your rules** — hints come from whatever provider you pick: Claude,
-  OpenAI, a local Ollama model, or any OpenAI-compatible endpoint. Nothing is
-  hardcoded, and env-wizard stores **no** API keys.
-- 🔒 **Private by design** — your `.env` values are **never** sent to any AI, cloud or
-  local. And with a local provider (Ollama, LM Studio at `http://localhost:11434`) the
-  whole prompt stays on your machine — nothing leaves at all.
-- 🧠 **Repo-aware hints** — the AI is fed your README, common config files, and every
-  place the variable appears in the code, so its advice is specific — not generic.
-- 🔎 **Catches drift** — `env-wizard scan` audits your `.env.example` against what's
-  actually used in the code (6 languages), and can even work with **no example at all**.
-- 📄 **Not just `.env`** — TOML, YAML, and JSON config templates get the same guided
-  walkthrough, and only the values you change are ever touched.
-- 💾 **Safe, tidy writes** — confirms before overwriting an existing `.env`, keeps a
-  `.env.bak`, carries your `.env.example` comments over each variable, and writes the
-  file `0600` (owner-only) on Unix.
-- 🪶 **One small binary** — written in Rust. No runtime, no daemon, starts instantly.
 
 ## 🧩 Choose your AI
 
@@ -393,6 +385,9 @@ yet — feedback welcome.
 
 ## 🤝 Contributing
 
+If env-wizard saved you the twenty minutes of `.env` archaeology, a ⭐ on the repo
+helps other people find it too.
+
 Issues and PRs are welcome! Before opening a PR, please run:
 
 ```sh
@@ -403,3 +398,4 @@ cargo clippy --all-targets
 ## 📄 License
 
 [MIT](LICENSE) © Alphonse Terrier
+</content>
