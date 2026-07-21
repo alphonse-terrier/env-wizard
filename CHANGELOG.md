@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-21
+
 ### Added
 - Detect environment variables **used in the source code** (JS/TS, Python, Rust, Go, Ruby,
   PHP) as a complement to `.env.example`:
@@ -53,6 +55,7 @@ All notable changes to this project are documented here. The format is based on
 - Markdown-to-terminal rendering of AI answers.
 - Prebuilt binaries for macOS (arm64/x86_64) and Linux (x86_64 musl); Homebrew tap.
 
-[Unreleased]: https://github.com/alphonse-terrier/env-wizard/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/alphonse-terrier/env-wizard/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/alphonse-terrier/env-wizard/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/alphonse-terrier/env-wizard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alphonse-terrier/env-wizard/releases/tag/v0.1.0
