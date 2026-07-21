@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Detect environment variables **used in the source code** (JS/TS, Python, Rust, Go, Ruby,
+  PHP) as a complement to `.env.example`:
+  - `env-wizard scan` — audit report of vars used in code but missing from the example
+    (with `file:line`), and vars declared but unused.
+  - Fallback — when no `.env.example` exists, derive the variable list from the code.
+  - `--from-code` — merge code-discovered variables into the example-driven run.
+- `release.sh` — one-command release (bump version + changelog + README, tag, push).
+
 ## [0.2.0] - 2026-07-20
 
 ### Added

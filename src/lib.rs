@@ -7,4 +7,6 @@ pub mod parser;
 pub mod prompt;
 pub mod provider;
 pub mod render;
+pub mod repo;
+pub mod scan;
 pub mod writer;

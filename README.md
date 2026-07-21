@@ -99,7 +99,7 @@ That's it. 🎉
 
 ---
 
-**Jump to:** [Problem](#-the-problem) · [Demo](#-demo) · [Features](#-why-youll-like-it) · [Choose your AI](#-choose-your-ai) · [Usage](#-usage-reference) · [How it works](#-how-it-works) · [FAQ](#-faq)
+**Jump to:** [Problem](#-the-problem) · [Demo](#-demo) · [Features](#-why-youll-like-it) · [Choose your AI](#-choose-your-ai) · [Scan code](#-discover-variables-from-your-code) · [Usage](#-usage-reference) · [How it works](#-how-it-works) · [FAQ](#-faq)
 
 ## 🤔 The problem
 
@@ -204,6 +204,32 @@ prompt_via = "arg"         # "arg" (append prompt) | "stdin" (pipe prompt)
 # api_key_env = "OPENAI_API_KEY"   # empty = no auth (e.g. local Ollama)
 ```
 
+## 🔎 Discover variables from your code
+
+`.env.example` files drift — a variable gets used in the code but nobody adds it to the
+example. env-wizard can read the **source** too, detecting the usual access patterns:
+
+| Language | Detected |
+| -------- | -------- |
+| JS / TS  | `process.env.FOO`, `process.env["FOO"]`, `import.meta.env.FOO` |
+| Python   | `os.environ["FOO"]`, `os.environ.get("FOO")`, `os.getenv("FOO")` |
+| Rust     | `env::var("FOO")`, `env!("FOO")`, `option_env!("FOO")` |
+| Go       | `os.Getenv("FOO")`, `os.LookupEnv("FOO")` |
+| Ruby     | `ENV["FOO"]`, `ENV.fetch("FOO")` |
+| PHP      | `getenv("FOO")`, `$_ENV["FOO"]` |
+
+Three ways it helps:
+
+- **Audit** — `env-wizard scan` prints variables used in code but missing from
+  `.env.example` (with `file:line`), and ones declared but never used. Read-only.
+- **Fallback** — no `.env.example`? env-wizard derives the list from the code and runs
+  the wizard anyway.
+- **Augment** — `env-wizard --from-code` prompts for the example's variables **plus** any
+  extra ones found in the code.
+
+> Heuristic (regex, v1): computed keys like `process.env[someVar]` can't be detected
+> reliably. As everywhere else, real `.env` files are never read. (`src/scan.rs`)
+
 ## 📖 Usage reference
 
 Run it at the root of a repo that has a `.env.example`:
@@ -230,13 +256,15 @@ env-wizard
 | `-o, --output <PATH>` | Env file to write (default `.env`)                   |
 | `-y, --yes`           | Accept all defaults and overwrite without confirming |
 | `--no-ai`             | Disable the AI hint feature (no calls to a provider) |
+| `--from-code`         | Also prompt for variables discovered in the code     |
 
 **Commands:**
 
-| Command          | Description                              |
-| ---------------- | ---------------------------------------- |
-| `env-wizard`     | Run the interactive `.env` filler        |
-| `env-wizard config` | Choose or change the AI provider      |
+| Command             | Description                              |
+| ------------------- | ---------------------------------------- |
+| `env-wizard`        | Run the interactive `.env` filler        |
+| `env-wizard config` | Choose or change the AI provider         |
+| `env-wizard scan`   | Audit code usage vs `.env.example`       |
 
 ## 🛠 How it works
 

@@ -5,9 +5,9 @@ use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
-use walkdir::WalkDir;
 
 use crate::provider;
+use crate::repo;
 
 /// Max size (bytes) of the README injected into the prompt.
 const README_LIMIT: usize = 8 * 1024;
@@ -17,8 +17,6 @@ const CONFIG_FILE_LIMIT: usize = 4 * 1024;
 const PROMPT_LIMIT: usize = 12 * 1024;
 /// Max number of variable occurrences to include.
 const MAX_GREP_HITS: usize = 20;
-/// Skip files larger than this when grepping (avoids loading huge files).
-const MAX_GREP_FILE_BYTES: u64 = 256 * 1024;
 
 /// Entry point: produces a hint for `var_key`, or an error.
 ///
@@ -113,31 +111,11 @@ fn is_interesting_config(name: &str) -> bool {
 fn grep_variable(repo_root: &Path, var_key: &str) -> String {
     let mut lines: Vec<String> = Vec::new();
 
-    let walker = WalkDir::new(repo_root)
-        .into_iter()
-        .filter_entry(|e| !is_excluded(e.path()));
-
-    for entry in walker.flatten() {
+    for (path, content) in repo::text_files(repo_root) {
         if lines.len() >= MAX_GREP_HITS {
             break;
         }
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        let path = entry.path();
-        // Skip lockfiles (huge, noisy) and files over the size cap.
-        if is_lockfile(path) {
-            continue;
-        }
-        if entry.metadata().map(|m| m.len()).unwrap_or(0) > MAX_GREP_FILE_BYTES {
-            continue;
-        }
-        let content = match std::fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(_) => continue, // binary or unreadable: skip
-        };
-        let rel = path.strip_prefix(repo_root).unwrap_or(path).display();
-
+        let rel = path.strip_prefix(repo_root).unwrap_or(&path).display();
         for (i, line) in content.lines().enumerate() {
             if matches_whole_word(line, var_key) {
                 lines.push(format!("{rel}:{}: {}", i + 1, line.trim()));
@@ -171,55 +149,6 @@ fn matches_whole_word(haystack: &str, needle: &str) -> bool {
         from = start + 1;
     }
     false
-}
-
-/// Recognizes dependency lockfiles, which are large and add no useful context.
-fn is_lockfile(path: &Path) -> bool {
-    match path.file_name().and_then(|n| n.to_str()) {
-        Some(name) => {
-            let lower = name.to_ascii_lowercase();
-            lower.ends_with(".lock")
-                || lower == "package-lock.json"
-                || lower == "yarn.lock"
-                || lower == "pnpm-lock.yaml"
-                || lower == "poetry.lock"
-                || lower == "composer.lock"
-        }
-        None => false,
-    }
-}
-
-/// Directories/files to exclude from the walk.
-///
-/// Beyond the usual build/VCS dirs, this deliberately skips real dotenv files
-/// (`.env`, `.env.local`, `.env.production`, …) so their secret *values* can
-/// never end up in a prompt sent to the AI. Template files (`.env.example`,
-/// `.env.sample`, …) are safe and left in.
-fn is_excluded(path: &Path) -> bool {
-    path.file_name()
-        .map(|n| {
-            let n = n.to_string_lossy();
-            n == ".git"
-                || n == "target"
-                || n == "node_modules"
-                || n == ".venv"
-                || n == "vendor"
-                || is_secret_env_file(&n)
-        })
-        .unwrap_or(false)
-}
-
-/// True for dotenv files that may contain real secrets — everything named
-/// `.env` or `.env.*` except the safe template variants.
-fn is_secret_env_file(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    if lower != ".env" && !lower.starts_with(".env.") {
-        return false;
-    }
-    !(lower.ends_with(".example")
-        || lower.ends_with(".sample")
-        || lower.ends_with(".template")
-        || lower.ends_with(".dist"))
 }
 
 /// Builds the textual prompt sent to the provider.
@@ -296,18 +225,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn classifies_secret_vs_template_env_files() {
-        assert!(is_secret_env_file(".env"));
-        assert!(is_secret_env_file(".env.local"));
-        assert!(is_secret_env_file(".env.production"));
-        assert!(is_secret_env_file(".ENV")); // case-insensitive
-        assert!(!is_secret_env_file(".env.example"));
-        assert!(!is_secret_env_file(".env.sample"));
-        assert!(!is_secret_env_file(".env.template"));
-        assert!(!is_secret_env_file("settings.py"));
-    }
-
-    #[test]
     fn grep_never_reads_dotenv_secrets() {
         let dir = std::env::temp_dir().join("env-wizard-grep-secret-test");
         let _ = std::fs::remove_dir_all(&dir);
@@ -350,7 +267,10 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("Cargo.lock"), "MY_VAR = referenced here\n").unwrap();
-        let big = format!("MY_VAR\n{}", "x".repeat((MAX_GREP_FILE_BYTES + 1) as usize));
+        let big = format!(
+            "MY_VAR\n{}",
+            "x".repeat((repo::MAX_FILE_BYTES + 1) as usize)
+        );
         std::fs::write(dir.join("big.txt"), big).unwrap();
         std::fs::write(dir.join("src.rs"), "let v = env(\"MY_VAR\");\n").unwrap();
 
