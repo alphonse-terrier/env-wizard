@@ -37,6 +37,9 @@ Working with Claude Code, Codex, or another coding agent? Just hand it this prom
 
 > Install env-wizard from https://github.com/alphonse-terrier/env-wizard
 
+<details>
+<summary>Manual install instructions (macOS / Linux / Windows / Cargo)</summary>
+
 ### 🍎 macOS
 
 **Homebrew** (recommended):
@@ -101,6 +104,8 @@ cargo install --path .
 </details>
 
 > **Verify a download** against [`SHA256SUMS`](https://github.com/alphonse-terrier/env-wizard/releases/latest) on the release page.
+
+</details>
 
 ### First run
 
