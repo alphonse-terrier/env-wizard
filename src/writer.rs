@@ -36,6 +36,33 @@ pub fn write_env(
     )
 }
 
+/// Appends `entries` to an existing `.env` file at `output_path`, using the same
+/// rendering as [`write_env`] (comment header + `KEY=value`), separated from the
+/// file's existing content by one blank line — matching the blank-line separation
+/// `render` already uses between entries.
+///
+/// Assumes `output_path` already exists (callers only invoke this right after a
+/// successful `write_env`/`write_file` in the same run). Does not re-apply the
+/// `0600` restriction — appending doesn't change an existing file's mode.
+pub fn append_env(output_path: &Path, entries: &[(EnvVar, String)]) -> Result<()> {
+    use std::io::Write as _;
+
+    if entries.is_empty() {
+        return Ok(());
+    }
+
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(output_path)
+        .with_context(|| format!("failed to open {} for appending", output_path.display()))?;
+
+    file.write_all(b"\n")
+        .and_then(|_| file.write_all(render(entries).as_bytes()))
+        .with_context(|| format!("failed to append to {}", output_path.display()))?;
+
+    Ok(())
+}
+
 /// Writes `content` to `output_path`, confirming overwrite and backing up any
 /// existing file exactly like [`write_env`], but format-agnostic: the caller
 /// supplies already-rendered text (dotenv or a structured config document).
@@ -201,6 +228,41 @@ mod tests {
             let mode = std::fs::metadata(&out).unwrap().permissions().mode();
             assert_eq!(mode & 0o777, 0o600, "written .env should be 0600");
         }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn append_env_adds_blank_line_and_preserves_existing_content() {
+        let dir = std::env::temp_dir().join("env-wizard-writer-append-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join(".env");
+        write_env(&out, &[(var("PORT", "the port"), "8080".to_string())], true).unwrap();
+
+        append_env(&out, &[(var("NEW_VAR", "new var"), "value".to_string())]).unwrap();
+
+        let content = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(
+            content,
+            "# the port\nPORT=8080\n\n# new var\nNEW_VAR=value\n"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn append_env_is_a_noop_on_empty_entries() {
+        let dir = std::env::temp_dir().join("env-wizard-writer-append-empty-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join(".env");
+        write_env(&out, &[(var("PORT", "the port"), "8080".to_string())], true).unwrap();
+
+        append_env(&out, &[]).unwrap();
+
+        let content = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(content, "# the port\nPORT=8080\n");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

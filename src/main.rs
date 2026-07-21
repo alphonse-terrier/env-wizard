@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use console::style;
+use dialoguer::{theme::ColorfulTheme, Confirm};
 
 use env_wizard::config::{self, ConfigDoc, Field};
 use env_wizard::parser::{self, EnvVar};
@@ -141,7 +142,13 @@ fn main() -> Result<()> {
         .unwrap_or_else(|| default_output_for(&resolved));
 
     let outcome = match source {
-        Source::Dotenv(_) => writer::write_env(&output_path, &answers, cli.yes)?,
+        Source::Dotenv(_) => {
+            let outcome = writer::write_env(&output_path, &answers, cli.yes)?;
+            if matches!(outcome, WriteOutcome::Written) && !cli.from_code && !cli.yes {
+                offer_missing_code_vars(&repo_root, &output_path, &answers, &opts)?;
+            }
+            outcome
+        }
         Source::Config(mut doc, fields) => {
             let values: Vec<String> = answers.into_iter().map(|(_, v)| v).collect();
             config::apply_answers(doc.as_mut(), &fields, &values)?;
@@ -470,6 +477,86 @@ fn merge_vars(mut example: Vec<EnvVar>, code: Vec<EnvVar>) -> Vec<EnvVar> {
     example
 }
 
+/// Vars detected in code whose key isn't among `known_keys` — the keys that were
+/// actually prompted for and written in this run. This is the same "used in code
+/// but missing" diff `env-wizard scan` reports, but keyed off the actual
+/// prompted/answered set rather than a separately re-derived "declared" set, so
+/// the two can't drift apart.
+fn missing_code_vars(repo_root: &Path, known_keys: &HashSet<String>) -> Vec<EnvVar> {
+    let used = scan::scan_env_vars(repo_root);
+    let missing: std::collections::BTreeMap<String, String> = used
+        .into_iter()
+        .filter(|(k, _)| !known_keys.contains(k))
+        .collect();
+    scan::to_env_vars(&missing)
+}
+
+/// After a successful dotenv `.env` write (interactive, non-`--from-code` run
+/// only — see the guard at the call site), offers to add variables detected in
+/// the code but missing from what was just written. Does nothing if there's
+/// nothing missing, or if the user declines/quits.
+fn offer_missing_code_vars(
+    repo_root: &Path,
+    output_path: &Path,
+    answers: &[(EnvVar, String)],
+    opts: &Options,
+) -> Result<()> {
+    let known_keys: HashSet<String> = answers.iter().map(|(v, _)| v.key.clone()).collect();
+    let missing = missing_code_vars(repo_root, &known_keys);
+    if missing.is_empty() {
+        return Ok(());
+    }
+
+    println!();
+    println!(
+        "{}",
+        style(format!(
+            "Found {} variable(s) used in code but missing from {}:",
+            missing.len(),
+            output_path.display()
+        ))
+        .yellow()
+        .bold()
+    );
+    for var in &missing {
+        println!(
+            "  {} {}",
+            style(format!("• {}", var.key)).yellow(),
+            style(&var.description).dim()
+        );
+    }
+    println!();
+
+    let confirmed = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt("Add them to the .env file now?")
+        .default(false)
+        .interact()?;
+    if !confirmed {
+        return Ok(());
+    }
+
+    let new_answers = match prompt::run(repo_root, &missing, opts)? {
+        Outcome::Completed(a) => a,
+        Outcome::Quit => {
+            println!(
+                "{}",
+                style("Aborted — no additional variables added.").yellow()
+            );
+            return Ok(());
+        }
+    };
+
+    writer::append_env(output_path, &new_answers)?;
+    println!(
+        "{} {} additional variable(s) to {}",
+        style("✓ Appended").green().bold(),
+        new_answers.len(),
+        output_path.display()
+    );
+
+    Ok(())
+}
+
 /// `env-wizard scan`: read-only audit of code usage vs the example file.
 fn run_scan(resolved: &ResolvedInput) -> Result<()> {
     if matches!(resolved.format, InputFormat::Config(_)) {
@@ -628,6 +715,34 @@ mod tests {
             resolve_input_path_from(&dir.0, None),
             PathBuf::from(".env.example")
         );
+    }
+
+    #[test]
+    fn missing_code_vars_diffs_against_known_keys() {
+        let dir = TempDir::new("missing-code-vars");
+        std::fs::write(
+            dir.0.join("server.js"),
+            "const port = process.env.FOO;\nconst secret = process.env.BAR;\n",
+        )
+        .unwrap();
+
+        let known_keys: HashSet<String> = ["FOO".to_string()].into_iter().collect();
+        let missing = missing_code_vars(&dir.0, &known_keys);
+
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].key, "BAR");
+        assert!(missing[0].description.starts_with("detected in code: "));
+    }
+
+    #[test]
+    fn missing_code_vars_is_empty_when_everything_is_known() {
+        let dir = TempDir::new("missing-code-vars-empty");
+        std::fs::write(dir.0.join("server.js"), "const port = process.env.FOO;\n").unwrap();
+
+        let known_keys: HashSet<String> = ["FOO".to_string()].into_iter().collect();
+        let missing = missing_code_vars(&dir.0, &known_keys);
+
+        assert!(missing.is_empty());
     }
 
     #[test]
