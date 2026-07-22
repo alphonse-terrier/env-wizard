@@ -69,6 +69,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -82,13 +84,29 @@ jobs:
           ( cd dist && sha256sum *.tar.gz > SHA256SUMS )
           echo "--- SHA256SUMS ---"; cat dist/SHA256SUMS
 
+      - name: Extract release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" '
+            found && (/^## \[/ || /^\[.*\]: https?:\/\//) { exit }
+            found { print }
+            $0 ~ ("^## \\[" ver "\\]") { found=1 }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "warning: no CHANGELOG.md section found for $version" >&2
+            echo "_No changelog entry found for $version._" > release-notes.md
+          fi
+          echo "--- release-notes.md ---"; cat release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.tar.gz
             dist/SHA256SUMS
-          generate_release_notes: true
+          body_path: release-notes.md
 
   bump-tap:
     name: bump Homebrew tap

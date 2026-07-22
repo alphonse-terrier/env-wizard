@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- Code scanning now also detects NestJS `@nestjs/config` (`configService.get("FOO")`,
+  `.get<Type>("FOO")`, `.getOrThrow("FOO")`) and Zod-style env schemas (zod / t3-env /
+  znv), e.g. `FOO: z.string()` — any `SCREAMING_SNAKE_CASE` key mapped to a zod
+  validator, including multi-line chained validators.
+
 ## [0.5.0] - 2026-07-21
 
 ### Added
