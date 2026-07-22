@@ -227,6 +227,8 @@ Detected patterns:
 | Language | Detected |
 | -------- | -------- |
 | JS / TS  | `process.env.FOO`, `process.env["FOO"]`, `import.meta.env.FOO` |
+| NestJS (`@nestjs/config`) | `configService.get("FOO")`, `.get<Type>("FOO")`, `.getOrThrow("FOO")` |
+| Zod env schemas (zod / t3-env / znv) | `FOO: z.string()` — any `SCREAMING_SNAKE_CASE` key mapped to a zod validator |
 | Python   | `os.environ["FOO"]`, `os.environ.get("FOO")`, `os.getenv("FOO")` |
 | Rust     | `env::var("FOO")`, `env!("FOO")`, `option_env!("FOO")` |
 | Go       | `os.Getenv("FOO")`, `os.LookupEnv("FOO")` |
@@ -236,8 +238,10 @@ Detected patterns:
 | Java / Kotlin | `System.getenv("FOO")` |
 
 > Heuristic (regex, v1): computed keys like `process.env[someVar]` can't be detected
-> reliably. As everywhere else, real `.env` files are never read — only source code.
-> (`src/scan.rs`)
+> reliably. The NestJS and Zod patterns lean on conventions rather than a fixed API —
+> a `configService` receiver name, a `z` import alias, `SCREAMING_SNAKE_CASE` keys —
+> so a differently-named config service or a non-conventional schema won't be picked up.
+> As everywhere else, real `.env` files are never read — only source code. (`src/scan.rs`)
 
 </details>
 

@@ -21,6 +21,19 @@ fn patterns() -> &'static [Regex] {
             r#"process\.env\.([A-Za-z_][A-Za-z0-9_]*)"#,
             r#"process\.env\[\s*["']([^"']+)["']\s*\]"#,
             r#"import\.meta\.env\.([A-Za-z_][A-Za-z0-9_]*)"#,
+            // NestJS ConfigModule (@nestjs/config): configService.get('X'),
+            // .get<string>('X'), .getOrThrow('X'). Anchored on the literal
+            // receiver name `configService` (with an optional `this.`) so a
+            // generic `.get(...)` call on some other object (a Map, a cache,
+            // an HTTP client) isn't mistaken for a config lookup.
+            r#"(?:this\.)?configService\.get(?:OrThrow)?(?:<[^>()]+>)?\(\s*["']([^"']+)["']"#,
+            // Zod env schemas (zod / t3-env / znv): SCREAMING_SNAKE_CASE object
+            // keys whose value is a zod validator, e.g. `NODE_ENV: z.enum(...)`.
+            // The SCREAMING_SNAKE_CASE requirement is the anti-false-positive
+            // guard: env schemas follow that env-var naming convention, while
+            // ordinary business schemas (user models, form data, ...) use
+            // camelCase keys and so never match.
+            r#"^\s*([A-Z][A-Z0-9_]*):\s*z(?:\.|\s*$)"#,
             // Python
             r#"os\.environ\[\s*["']([^"']+)["']\s*\]"#,
             r#"os\.environ\.get\(\s*["']([^"']+)["']"#,
@@ -159,6 +172,14 @@ mod tests {
                 "a.js",
                 "const x = process.env.API_URL;\nconst y = import.meta.env.VITE_KEY;",
             ),
+            (
+                "nest.ts",
+                "this.configService.get('NEST_HOST');\nconfigService.get<number>('NEST_PORT');\nthis.configService.getOrThrow('NEST_SECRET');",
+            ),
+            (
+                "zod-env.ts",
+                "const envSchema = z.object({\n  NODE_ENV: z.enum([\"development\", \"production\"]),\n  PORT: z.coerce.number().int().positive(),\n  DB_SSL: z\n    .string()\n    .optional(),\n});",
+            ),
             ("b.py", "os.getenv('DB_HOST')\nos.environ[\"DB_PORT\"]"),
             (
                 "c.rs",
@@ -173,6 +194,12 @@ mod tests {
         for key in [
             "API_URL",
             "VITE_KEY",
+            "NEST_HOST",
+            "NEST_PORT",
+            "NEST_SECRET",
+            "NODE_ENV",
+            "PORT",
+            "DB_SSL",
             "DB_HOST",
             "DB_PORT",
             "RUST_LOG",
@@ -184,6 +211,42 @@ mod tests {
             "JAVA_HOME_VAR",
         ] {
             assert!(found.contains_key(key), "missing {key} in {found:?}");
+        }
+    }
+
+    #[test]
+    fn nest_and_zod_patterns_avoid_false_positives() {
+        let found = scan_dir(&[
+            (
+                "model.ts",
+                // Business schema, not an env schema: camelCase keys must
+                // never match the SCREAMING_SNAKE_CASE-anchored zod pattern.
+                "const userSchema = z.object({\n  email: z.string(),\n  firstName: z.string(),\n});",
+            ),
+            (
+                "trap.ts",
+                // SCREAMING_SNAKE_CASE key, but the value isn't a zod
+                // validator — `zone.run()` starts with `z` but not `z.`
+                // right after the identifier, so this must not match.
+                "const CONFIG = {\n  FOO: makeThing(),\n  BAR: zone.run(),\n};",
+            ),
+            (
+                "generic-get.ts",
+                // `.get(...)` on something other than `configService` must
+                // not be mistaken for a config lookup.
+                "cache.get('SESSION_KEY');\nmyMap.get('SOME_KEY');\nhttp.get('/api/GET_ENDPOINT');",
+            ),
+        ]);
+        for key in [
+            "email",
+            "firstName",
+            "FOO",
+            "BAR",
+            "SESSION_KEY",
+            "SOME_KEY",
+            "GET_ENDPOINT",
+        ] {
+            assert!(!found.contains_key(key), "unexpected {key} in {found:?}");
         }
     }
 
